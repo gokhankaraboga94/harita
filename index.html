@@ -1,1 +1,179 @@
-// test
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>harita.info | Türkiye'nin Enleri</title>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, push, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+
+        // Gökhan'ın Firebase Yapılandırması
+        const firebaseConfig = {
+            apiKey: "AIzaSyAKkEHHeHnfHSN0MpEcJoK4Ix9o2PFbPY8",
+            authDomain: "harita-4b58b.firebaseapp.com",
+            projectId: "harita-4b58b",
+            storageBucket: "harita-4b58b.firebasestorage.app",
+            messagingSenderId: "778047554386",
+            appId: "1:778047554386:web:41f29d854399a1d878b08b",
+            measurementId: "G-ZNSZZC3HVS",
+            databaseURL: "https://harita-4b58b-default-rtdb.firebaseio.com"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const storage = getStorage(app);
+
+        window.db = db;
+        window.storage = storage;
+        window.adaylar = [];
+
+        // Realtime Database Veri Takibi
+        onValue(ref(db, 'adaylar'), (snapshot) => {
+            const data = snapshot.val();
+            window.adaylar = data ? Object.keys(data).map(k => ({ id: k, ...data[k] })) : [];
+            renderMaps();
+        });
+
+        // Global Fonksiyonlar (Arayüz İçin)
+        window.submitAday = async () => {
+            if(localStorage.getItem('user_has_joined')) return alert("Zaten katıldınız!");
+            const gender = document.getElementById('upGender').value;
+            const city = parseInt(document.getElementById('upCity').value);
+            const name = document.getElementById('upName').value;
+            const file = document.getElementById('upFile').files[0];
+
+            if(!city || !name || !file || city < 1 || city > 81) return alert("Bilgileri kontrol et!");
+
+            try {
+                const fileRef = sRef(storage, `adaylar/${Date.now()}_${file.name}`);
+                const up = await uploadBytes(fileRef, file);
+                const url = await getDownloadURL(up.ref);
+
+                const newAdayRef = push(ref(db, 'adaylar'));
+                await update(newAdayRef, { gender, city, name, img: url, votes: 0 });
+                
+                localStorage.setItem('user_has_joined', 'true');
+                alert("Yarışmaya katıldınız!");
+                location.reload();
+            } catch (e) { alert("Hata: " + e.message); }
+        };
+
+        window.vote = async (id) => {
+            if(localStorage.getItem('voted_' + id)) return alert("Zaten oy verdiniz!");
+            const aday = window.adaylar.find(a => a.id === id);
+            await update(ref(db, `adaylar/${id}`), { votes: (aday.votes || 0) + 1 });
+            localStorage.setItem('voted_' + id, 'true');
+            alert("Oyunuz kaydedildi!");
+            document.getElementById('voteModal').style.display = 'none';
+        };
+    </script>
+
+    <style>
+        :root { --male: #0084ff; --female: #ff007b; --dark: #121212; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
+        body { background: #f8f9fa; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        header { background: var(--dark); color: white; padding: 15px; text-align: center; }
+        .tab-controls { display: flex; background: #fff; border-bottom: 1px solid #ddd; }
+        .tab-btn { flex: 1; padding: 15px; border: none; font-weight: bold; cursor: pointer; opacity: 0.5; }
+        .active-male { border-bottom: 4px solid var(--male); opacity: 1; color: var(--male); }
+        .active-female { border-bottom: 4px solid var(--female); opacity: 1; color: var(--female); }
+        .container { display: flex; flex: 1; overflow: hidden; }
+        .pane { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 10px; overflow-y: auto; }
+        .pane-male { background: #f0f7ff; }
+        .pane-female { background: #fff5f8; }
+        svg { width: 100%; max-width: 900px; height: auto; }
+        .city-rect { stroke: #ccc; stroke-width: 0.5; cursor: pointer; transition: 0.2s; }
+        .city-label { font-size: 8px; font-weight: bold; pointer-events: none; fill: #111; text-shadow: 0 0 2px #fff; }
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center; z-index: 1000; padding: 15px; }
+        .modal-content { background: #fff; padding: 25px; border-radius: 15px; width: 100%; max-width: 400px; }
+        input, select { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; }
+        .btn-main { background: #ff9800; color: #fff; padding: 10px 20px; border: none; border-radius: 20px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        @media (max-width: 768px) { .pane { display: none; } .pane.mobile-active { display: flex; } }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>harita.info</h1>
+    <div id="joinArea"></div>
+</header>
+
+<div class="tab-controls">
+    <button class="tab-btn active-male" id="btnM" onclick="switchTab('male')">ERKEKLER</button>
+    <button class="tab-btn" id="btnF" onclick="switchTab('female')">KADINLAR</button>
+</div>
+
+<div class="container">
+    <div class="pane pane-male mobile-active" id="paneMale"><div id="svgMale"></div></div>
+    <div class="pane pane-female" id="paneFemale"><div id="svgFemale"></div></div>
+</div>
+
+<div id="uploadModal" class="modal">
+    <div class="modal-content">
+        <h3>Yarışmaya Katıl</h3>
+        <select id="upGender"><option value="male">Erkek</option><option value="female">Kadın</option></select>
+        <input type="number" id="upCity" placeholder="Plaka (1-81)">
+        <input type="text" id="upName" placeholder="Ad Soyad">
+        <input type="file" id="upFile" accept="image/*">
+        <button class="btn-main" style="width:100%; background:green;" onclick="submitAday()">Hemen Yayına Al</button>
+        <button onclick="document.getElementById('uploadModal').style.display='none'" style="width:100%; margin-top:10px; background:none; border:none; color:#666; cursor:pointer;">İptal</button>
+    </div>
+</div>
+
+<div id="voteModal" class="modal">
+    <div class="modal-content">
+        <h3 id="vTitle">Şehir Adayları</h3>
+        <div id="candidateList" style="margin-top:15px; max-height:300px; overflow-y:auto;"></div>
+        <button onclick="document.getElementById('voteModal').style.display='none'" style="width:100%; margin-top:15px; padding:10px;">Kapat</button>
+    </div>
+</div>
+
+<script>
+    const cityNames = ["Adana","Adıyaman","Afyon","Ağrı","Amasya","Ankara","Antalya","Artvin","Aydın","Balıkesir","Bilecik","Bingöl","Bitlis","Bolu","Burdur","Bursa","Çanakkale","Çankırı","Çorum","Denizli","Diyarbakır","Edirne","Elazığ","Erzincan","Erzurum","Eskişehir","Gaziantep","Giresun","Gümüşhane","Hakkari","Hatay","Isparta","Mersin","İstanbul","İzmir","Kars","Kastamonu","Kayseri","Kırklareli","Kırşehir","Kocaeli","Konya","Kütahya","Malatya","Manisa","K.Maraş","Mardin","Muğla","Muş","Nevşehir","Niğde","Ordu","Rize","Sakarya","Samsun","Siirt","Sinop","Sivas","Tekirdağ","Tokat","Trabzon","Tunceli","Şanlıurfa","Uşak","Van","Yozgat","Zonguldak","Aksaray","Bayburt","Karaman","Kırıkkale","Batman","Şırnak","Bartın","Ardahan","Iğdır","Yalova","Karabük","Kilis","Osmaniye","Düzce"];
+
+    function switchTab(g) {
+        document.getElementById('paneMale').classList.toggle('mobile-active', g === 'male');
+        document.getElementById('paneFemale').classList.toggle('mobile-active', g === 'female');
+        document.getElementById('btnM').classList.toggle('active-male', g === 'male');
+        document.getElementById('btnF').classList.toggle('active-female', g === 'female');
+    }
+
+    function renderMaps() {
+        const draw = (id, gender) => {
+            let defs = "<defs>";
+            let content = "";
+            for (let i = 1; i <= 81; i++) {
+                const leader = (window.adaylar || []).filter(a => a.city == i && a.gender == gender).sort((a,b)=>b.votes-a.votes)[0];
+                let fill = "#fff";
+                if(leader) {
+                    defs += `<pattern id="p-${gender}-${i}" width="1" height="1" patternUnits="objectBoundingBox"><image href="${leader.img}" width="95" height="65" preserveAspectRatio="xMidYMid slice"/></pattern>`;
+                    fill = `url(#p-${gender}-${i})`;
+                }
+                const x = ((i-1)%9)*95; const y = Math.floor((i-1)/9)*65;
+                content += `<rect x="${x}" y="${y}" width="90" height="60" class="city-rect" style="fill:${fill}" onclick="openCity(${i},'${gender}')"/><text x="${x+45}" y="${y+25}" class="city-label">${i}</text><text x="${x+45}" y="${y+42}" class="city-label" style="font-size:5px; opacity:0.6;">${cityNames[i-1]}</text>`;
+            }
+            document.getElementById(id).innerHTML = `<svg viewBox="-5 -5 860 600">${defs}</defs>${content}</svg>`;
+        };
+        draw('svgMale', 'male'); draw('svgFemale', 'female');
+        updateBtn();
+    }
+
+    function updateBtn() {
+        const joinArea = document.getElementById('joinArea');
+        if(localStorage.getItem('user_has_joined')) joinArea.innerHTML = `<button class="btn-main" style="background:#28a745" disabled>Yarışmaya Katıldınız</button>`;
+        else joinArea.innerHTML = `<button class="btn-main" onclick="document.getElementById('uploadModal').style.display='flex'">Yarışmacı Ol</button>`;
+    }
+
+    function openCity(cityId, gender) {
+        const filtered = (window.adaylar || []).filter(a => a.city == cityId && a.gender == gender).sort((a,b)=>b.votes-a.votes);
+        document.getElementById('vTitle').innerText = cityId + " - " + cityNames[cityId-1] + " Adayları";
+        const list = document.getElementById('candidateList');
+        list.innerHTML = filtered.length ? filtered.map(a => `<div style="display:flex; align-items:center; margin-bottom:12px; padding:10px; border:1px solid #eee; border-radius:10px;"><img src="${a.img}" style="width:50px; height:50px; border-radius:50%; object-fit:cover; margin-right:12px;"><div style="flex:1"><b>${a.name}</b><br><small>${a.votes} Oy</small></div><button onclick="vote('${a.id}')" style="background:orange; color:white; border:none; padding:8px 12px; border-radius:6px; cursor:pointer;">Oy Ver</button></div>`).join('') : "<p style='text-align:center;'>Aday yok.</p>";
+        document.getElementById('voteModal').style.display = 'flex';
+    }
+</script>
+</body>
+</html>
