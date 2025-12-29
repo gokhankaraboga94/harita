@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <html lang="tr">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>harita.info | Türkiye'nin Enleri</title>
-    
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getDatabase, ref, push, onValue, update, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
@@ -38,7 +39,7 @@
         onValue(ref(db, 'bekleyen_adaylar'), (snapshot) => {
             const data = snapshot.val();
             window.bekleyenAdaylar = data ? Object.keys(data).map(k => ({ id: k, ...data[k] })) : [];
-            if(isAdminPage()) renderModPanel();
+            if (isAdminPage()) renderModPanel();
         });
 
         // Görsel Base64'e Çevirme
@@ -53,20 +54,20 @@
 
         // Yarışmacı Başvurusu
         window.submitAday = async () => {
-            if(localStorage.getItem('user_has_joined')) return alert("Zaten katıldınız!");
-            
+            if (localStorage.getItem('user_has_joined')) return alert("Zaten katıldınız!");
+
             const gender = document.getElementById('upGender').value;
             const city = parseInt(document.getElementById('upCity').value);
             const name = document.getElementById('upName').value;
             const instagram = document.getElementById('upInstagram').value.trim();
             const file = document.getElementById('upFile').files[0];
 
-            if(!city || !name || !file || city < 1 || city > 81) {
+            if (!city || !name || !file || city < 1 || city > 81) {
                 return alert("Lütfen tüm zorunlu alanları doldurun!");
             }
 
-            if(file.size > 1024 * 1024) {
-                return alert("Görsel boyutu 1MB'dan küçük olmalı!");
+            if (file.size > 3 * 1024 * 1024) {
+                return alert("Görsel boyutu 3MB'dan küçük olmalı!");
             }
 
             try {
@@ -76,23 +77,23 @@
                 const base64 = await fileToBase64(file);
 
                 const newAdayRef = push(ref(db, 'bekleyen_adaylar'));
-                await update(newAdayRef, { 
-                    gender, 
-                    city, 
-                    name, 
+                await update(newAdayRef, {
+                    gender,
+                    city,
+                    name,
                     instagram: instagram || null,
                     img: base64,
                     votes: 0,
                     status: 'pending',
                     createdAt: Date.now()
                 });
-                
+
                 localStorage.setItem('user_has_joined', 'true');
                 alert("Başvurunuz alındı! Admin onayından sonra yayınlanacak.");
                 document.getElementById('uploadModal').style.display = 'none';
                 location.reload();
-            } catch (e) { 
-                alert("Hata: " + e.message); 
+            } catch (e) {
+                alert("Hata: " + e.message);
                 document.getElementById('submitBtn').disabled = false;
                 document.getElementById('submitBtn').innerText = "📤 Başvuruyu Gönder";
             }
@@ -100,7 +101,7 @@
 
         // Oy Verme
         window.vote = async (id) => {
-            if(localStorage.getItem('voted_' + id)) return alert("Zaten oy verdiniz!");
+            if (localStorage.getItem('voted_' + id)) return alert("Zaten oy verdiniz!");
             const aday = window.adaylar.find(a => a.id === id);
             await update(ref(db, `adaylar/${id}`), { votes: (aday.votes || 0) + 1 });
             localStorage.setItem('voted_' + id, 'true');
@@ -111,10 +112,10 @@
         // Admin: Başvuruyu Onayla
         window.approveAday = async (id) => {
             const aday = window.bekleyenAdaylar.find(a => a.id === id);
-            if(!aday) return;
-            
+            if (!aday) return;
+
             const newAdayRef = push(ref(db, 'adaylar'));
-            await update(newAdayRef, { 
+            await update(newAdayRef, {
                 gender: aday.gender,
                 city: aday.city,
                 name: aday.name,
@@ -122,14 +123,14 @@
                 img: aday.img,
                 votes: 0
             });
-            
+
             await remove(ref(db, `bekleyen_adaylar/${id}`));
             alert("Başvuru onaylandı!");
         };
 
         // Admin: Başvuruyu Reddet
         window.rejectAday = async (id) => {
-            if(!confirm("Bu başvuruyu reddetmek istediğinize emin misiniz?")) return;
+            if (!confirm("Bu başvuruyu reddetmek istediğinize emin misiniz?")) return;
             await remove(ref(db, `bekleyen_adaylar/${id}`));
             alert("Başvuru reddedildi.");
         };
@@ -137,12 +138,12 @@
         // Admin Panelini Render Et
         window.renderModPanel = () => {
             const panel = document.getElementById('modPanel');
-            if(!panel) return;
-            
+            if (!panel) return;
+
             const count = document.getElementById('pendingCount');
-            if(count) count.innerText = window.bekleyenAdaylar.length;
-            
-            if(window.bekleyenAdaylar.length === 0) {
+            if (count) count.innerText = window.bekleyenAdaylar.length;
+
+            if (window.bekleyenAdaylar.length === 0) {
                 panel.innerHTML = '<p style="text-align:center; padding:20px; color:#999;">Bekleyen başvuru yok.</p>';
                 return;
             }
@@ -154,9 +155,9 @@
                         <div style="flex:1;">
                             <h3 style="margin:0 0 5px 0;">${a.name}</h3>
                             <p style="margin:0; color:#666; font-size:14px;">
-                                <strong>Şehir:</strong> ${a.city} - ${window.cityNames[a.city-1]}<br>
+                                <strong>Şehir:</strong> ${a.city} - ${window.cityNames[a.city - 1]}<br>
                                 <strong>Cinsiyet:</strong> ${a.gender === 'male' ? 'Erkek' : 'Kadın'}<br>
-                                ${a.instagram ? `<strong>Instagram:</strong> <a href="https://instagram.com/${a.instagram.replace('@','')}" target="_blank">@${a.instagram.replace('@','')}</a>` : '<em>Instagram yok</em>'}
+                                ${a.instagram ? `<strong>Instagram:</strong> <a href="https://instagram.com/${a.instagram.replace('@', '')}" target="_blank">@${a.instagram.replace('@', '')}</a>` : '<em>Instagram yok</em>'}
                             </p>
                         </div>
                     </div>
@@ -166,6 +167,73 @@
                     </div>
                 </div>
             `).join('');
+
+            // Türkiye birincilerini de render et
+            renderTurkeyWinnersAdmin();
+        };
+
+        // Admin Panel - Türkiye Birincileri (Gizli - Sadece Admin Görür)
+        window.renderTurkeyWinnersAdmin = () => {
+            const container = document.getElementById('turkeyWinnersAdmin');
+            if (!container) return;
+
+            const adaylar = window.adaylar || [];
+            const cityNames = window.cityNames || [];
+
+            // Her ilin birincilerini bul
+            const maleWinners = [];
+            const femaleWinners = [];
+
+            for (let i = 1; i <= 81; i++) {
+                const maleLeader = adaylar
+                    .filter(a => a.city == i && a.gender == 'male')
+                    .sort((a, b) => b.votes - a.votes)[0];
+                const femaleLeader = adaylar
+                    .filter(a => a.city == i && a.gender == 'female')
+                    .sort((a, b) => b.votes - a.votes)[0];
+
+                if (maleLeader) maleWinners.push({ ...maleLeader, cityName: cityNames[i - 1] });
+                if (femaleLeader) femaleWinners.push({ ...femaleLeader, cityName: cityNames[i - 1] });
+            }
+
+            // Türkiye 1.'lerini bul (en çok oy alan il birincileri)
+            const turkeyMaleWinner = maleWinners.sort((a, b) => b.votes - a.votes)[0];
+            const turkeyFemaleWinner = femaleWinners.sort((a, b) => b.votes - a.votes)[0];
+
+            const renderWinnerCard = (winner, title, color) => {
+                if (!winner) {
+                    return `
+                        <div style="flex: 1; min-width: 300px; background: #f8f9fa; border-radius: 15px; padding: 25px; text-align: center;">
+                            <h3 style="color: ${color}; margin-bottom: 15px;">${title}</h3>
+                            <p style="color: #999;">Henüz yeterli veri yok</p>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div style="flex: 1; min-width: 300px; background: linear-gradient(135deg, ${color}22 0%, ${color}11 100%); border: 2px solid ${color}; border-radius: 15px; padding: 25px; text-align: center;">
+                        <h3 style="color: ${color}; margin-bottom: 15px;">🏆 ${title}</h3>
+                        <img src="${winner.img}" style="width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 4px solid #ffd700; margin-bottom: 15px;">
+                        <h2 style="margin: 0 0 10px 0; color: #333;">${winner.name}</h2>
+                        <p style="color: #666; margin: 5px 0;">
+                            <strong>İl:</strong> ${winner.city} - ${winner.cityName}
+                        </p>
+                        <p style="color: #28a745; font-size: 24px; font-weight: bold; margin: 15px 0;">
+                            🗳️ ${winner.votes} Oy
+                        </p>
+                        ${winner.instagram ? `
+                            <a href="https://instagram.com/${winner.instagram.replace('@', '')}" target="_blank" style="display: inline-block; background: #E4405F; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold;">
+                                📷 @${winner.instagram.replace('@', '')}
+                            </a>
+                        ` : '<em style="color: #999;">Instagram yok</em>'}
+                    </div>
+                `;
+            };
+
+            container.innerHTML = `
+                ${renderWinnerCard(turkeyMaleWinner, 'TÜRKİYE 1. ERKEK', '#0084ff')}
+                ${renderWinnerCard(turkeyFemaleWinner, 'TÜRKİYE 1. KADIN', '#ff007b')}
+            `;
         };
 
         // Sayfa yönlendirmesi
@@ -175,7 +243,7 @@
 
         // Sayfa yüklendiğinde kontrol
         window.addEventListener('load', () => {
-            if(isAdminPage()) {
+            if (isAdminPage()) {
                 document.getElementById('mainPage').style.display = 'none';
                 document.getElementById('adminPage').style.display = 'block';
                 document.title = 'Admin Panel | harita.info';
@@ -185,159 +253,431 @@
     </script>
 
     <style>
-        :root { --male: #0084ff; --female: #ff007b; --dark: #121212; }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
-        body { background: #f8f9fa; min-height: 100vh; display: flex; flex-direction: column; }
-        header { background: var(--dark); color: white; padding: 15px; text-align: center; position: relative; }
-        .tab-controls { display: flex; background: #fff; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; }
-        .tab-btn { flex: 1; padding: 15px; border: none; font-weight: bold; cursor: pointer; opacity: 0.5; background: white; }
-        .active-male { border-bottom: 4px solid var(--male); opacity: 1; color: var(--male); }
-        .active-female { border-bottom: 4px solid var(--female); opacity: 1; color: var(--female); }
-        .container { display: flex; flex: 1; overflow: hidden; }
-        .pane { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 10px; overflow-y: auto; }
-        .pane-male { background: #f0f7ff; }
-        .pane-female { background: #fff5f8; }
-        svg { width: 100%; max-width: 900px; height: auto; }
-        .city-rect { stroke: #ccc; stroke-width: 0.5; cursor: pointer; transition: 0.2s; }
-        .city-rect:hover { stroke: #333; stroke-width: 1.5; }
-        .city-label { font-size: 8px; font-weight: bold; pointer-events: none; fill: #111; text-shadow: 0 0 2px #fff; }
-        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center; z-index: 1000; padding: 15px; }
-        .modal-content { background: #fff; padding: 25px; border-radius: 15px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; }
-        input, select { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
-        .btn-main { background: #ff9800; color: #fff; padding: 10px 20px; border: none; border-radius: 20px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-        .btn-main:disabled { opacity: 0.6; cursor: not-allowed; }
-        .instagram-info { background: #f0f0f0; padding: 10px; border-radius: 8px; font-size: 12px; color: #666; margin: 5px 0; }
-        .admin-page { padding: 20px; max-width: 1200px; margin: 0 auto; }
-        .candidate-instagram { color: #E4405F; font-weight: 600; text-decoration: none; font-size: 11px; }
-        .candidate-instagram:hover { text-decoration: underline; }
-        @media (max-width: 768px) { 
-            .pane { display: none; } 
-            .pane.mobile-active { display: flex; }
+        :root {
+            --male: #0084ff;
+            --female: #ff007b;
+            --dark: #121212;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        body {
+            background: #f8f9fa;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background: var(--dark);
+            color: white;
+            padding: 15px;
+            text-align: center;
+            position: relative;
+        }
+
+        .tab-controls {
+            display: flex;
+            background: #fff;
+            border-bottom: 1px solid #ddd;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 15px;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            opacity: 0.5;
+            background: white;
+            font-size: 12px;
+        }
+
+        .active-male {
+            border-bottom: 4px solid var(--male);
+            opacity: 1;
+            color: var(--male);
+        }
+
+        .active-female {
+            border-bottom: 4px solid var(--female);
+            opacity: 1;
+            color: var(--female);
+        }
+
+        .active-winners {
+            border-bottom: 4px solid #ffd700;
+            opacity: 1;
+            color: #ffd700;
+        }
+
+        .container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .pane {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 10px;
+            overflow-y: auto;
+        }
+
+        .pane-male {
+            background: #f0f7ff;
+        }
+
+        .pane-female {
+            background: #fff5f8;
+        }
+
+        svg {
+            width: 100%;
+            max-width: 900px;
+            height: auto;
+        }
+
+        .city-rect {
+            stroke: #ccc;
+            stroke-width: 0.5;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .city-rect:hover {
+            stroke: #333;
+            stroke-width: 1.5;
+        }
+
+        .city-label {
+            font-size: 8px;
+            font-weight: bold;
+            pointer-events: none;
+            fill: #111;
+            text-shadow: 0 0 2px #fff;
+        }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            padding: 15px;
+        }
+
+        .modal-content {
+            background: #fff;
+            padding: 25px;
+            border-radius: 15px;
+            width: 100%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        input,
+        select {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .btn-main {
+            background: #ff9800;
+            color: #fff;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .btn-main:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .instagram-info {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #666;
+            margin: 5px 0;
+        }
+
+        .admin-page {
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .candidate-instagram {
+            color: #E4405F;
+            font-weight: 600;
+            text-decoration: none;
+            font-size: 11px;
+        }
+
+        .candidate-instagram:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            .pane {
+                display: none;
+            }
+
+            .pane.mobile-active {
+                display: flex;
+            }
         }
     </style>
 </head>
+
 <body>
 
-<div id="mainPage">
-    <header>
-        <h1>harita.info</h1>
-        <div id="joinArea"></div>
-    </header>
+    <div id="mainPage">
+        <header>
+            <h1>harita.info</h1>
+            <div id="joinArea"></div>
+        </header>
 
-    <div class="tab-controls">
-        <button class="tab-btn active-male" id="btnM" onclick="switchTab('male')">ERKEKLER</button>
-        <button class="tab-btn" id="btnF" onclick="switchTab('female')">KADINLAR</button>
-    </div>
-
-    <div class="container">
-        <div class="pane pane-male mobile-active" id="paneMale"><div id="svgMale"></div></div>
-        <div class="pane pane-female" id="paneFemale"><div id="svgFemale"></div></div>
-    </div>
-</div>
-
-<div id="adminPage" style="display:none;">
-    <header style="background:#dc3545;">
-        <h1>🔐 Moderasyon Paneli</h1>
-        <a href="/" style="color:white; text-decoration:none; font-size:14px;">← Ana Sayfa</a>
-    </header>
-    <div class="admin-page">
-        <h2 style="margin-bottom:20px;">Bekleyen Başvurular (<span id="pendingCount">0</span>)</h2>
-        <div id="modPanel"></div>
-    </div>
-</div>
-
-<div id="uploadModal" class="modal">
-    <div class="modal-content">
-        <h3>🏆 Yarışmaya Katıl</h3>
-        <select id="upGender">
-            <option value="male">👨 Erkek</option>
-            <option value="female">👩 Kadın</option>
-        </select>
-        <input type="number" id="upCity" placeholder="İl Plaka Kodu (1-81)" min="1" max="81">
-        <input type="text" id="upName" placeholder="Ad Soyad">
-        <input type="text" id="upInstagram" placeholder="Instagram Kullanıcı Adı (İsteğe Bağlı)">
-        <div class="instagram-info">
-            💡 Instagram hesabınızı eklerseniz, kazandığınızda profiliniz görüntülenecek. (Opsiyonel)
+        <div class="tab-controls">
+            <button class="tab-btn active-male" id="btnM" onclick="switchTab('male')">ERKEKLER</button>
+            <button class="tab-btn" id="btnF" onclick="switchTab('female')">KADINLAR</button>
+            <button class="tab-btn" id="btnW" onclick="switchTab('winners')">TÜRKİYE BİRİNCİLERİ</button>
         </div>
-        <input type="file" id="upFile" accept="image/*">
-        <div style="font-size:12px; color:#999; margin-top:5px;">
-            ⚠️ Görsel boyutu maksimum 1MB olmalıdır
+
+        <div class="container">
+            <div class="pane pane-male mobile-active" id="paneMale">
+                <div id="svgMale"></div>
+            </div>
+            <div class="pane pane-female" id="paneFemale">
+                <div id="svgFemale"></div>
+            </div>
+            <div class="pane" id="paneWinners"
+                style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 20px; padding: 20px;">
+                <div id="winnersContent" style="width: 100%; max-width: 1400px;"></div>
+            </div>
         </div>
-        <button class="btn-main" id="submitBtn" style="width:100%; background:#28a745;" onclick="submitAday()">📤 Başvuruyu Gönder</button>
-        <button onclick="document.getElementById('uploadModal').style.display='none'" style="width:100%; margin-top:10px; background:none; border:none; color:#666; cursor:pointer;">İptal</button>
     </div>
-</div>
 
-<div id="voteModal" class="modal">
-    <div class="modal-content">
-        <h3 id="vTitle">Şehir Adayları</h3>
-        <div id="candidateList" style="margin-top:15px; max-height:400px; overflow-y:auto;"></div>
-        <button onclick="document.getElementById('voteModal').style.display='none'" style="width:100%; margin-top:15px; padding:10px;">Kapat</button>
+    <div id="adminPage" style="display:none;">
+        <header style="background:#dc3545;">
+            <h1>🔐 Moderasyon Paneli</h1>
+            <a href="/" style="color:white; text-decoration:none; font-size:14px;">← Ana Sayfa</a>
+        </header>
+        <div class="admin-page">
+            <h2 style="margin-bottom:20px;">Bekleyen Başvurular (<span id="pendingCount">0</span>)</h2>
+            <div id="modPanel"></div>
+
+            <hr style="margin: 40px 0; border: none; border-top: 2px solid #ddd;">
+
+            <h2 style="margin-bottom:20px;">🏆 Türkiye Birincileri (Gizli)</h2>
+            <div id="turkeyWinnersAdmin" style="display: flex; gap: 30px; flex-wrap: wrap;"></div>
+        </div>
     </div>
-</div>
 
-<script>
-    const cityNames = ["Adana","Adıyaman","Afyon","Ağrı","Amasya","Ankara","Antalya","Artvin","Aydın","Balıkesir","Bilecik","Bingöl","Bitlis","Bolu","Burdur","Bursa","Çanakkale","Çankırı","Çorum","Denizli","Diyarbakır","Edirne","Elazığ","Erzincan","Erzurum","Eskişehir","Gaziantep","Giresun","Gümüşhane","Hakkari","Hatay","Isparta","Mersin","İstanbul","İzmir","Kars","Kastamonu","Kayseri","Kırklareli","Kırşehir","Kocaeli","Konya","Kütahya","Malatya","Manisa","K.Maraş","Mardin","Muğla","Muş","Nevşehir","Niğde","Ordu","Rize","Sakarya","Samsun","Siirt","Sinop","Sivas","Tekirdağ","Tokat","Trabzon","Tunceli","Şanlıurfa","Uşak","Van","Yozgat","Zonguldak","Aksaray","Bayburt","Karaman","Kırıkkale","Batman","Şırnak","Bartın","Ardahan","Iğdır","Yalova","Karabük","Kilis","Osmaniye","Düzce"];
-    
-    window.cityNames = cityNames;
+    <div id="uploadModal" class="modal">
+        <div class="modal-content">
+            <h3>🏆 Yarışmaya Katıl</h3>
+            <select id="upGender">
+                <option value="male">👨 Erkek</option>
+                <option value="female">👩 Kadın</option>
+            </select>
+            <input type="number" id="upCity" placeholder="İl Plaka Kodu (1-81)" min="1" max="81">
+            <input type="text" id="upName" placeholder="Ad Soyad">
+            <input type="text" id="upInstagram" placeholder="Instagram Kullanıcı Adı (İsteğe Bağlı)">
+            <div class="instagram-info">
+                💡 Instagram hesabınızı eklerseniz, kazandığınızda profiliniz görüntülenecek. (Opsiyonel)
+            </div>
+            <input type="file" id="upFile" accept="image/*">
+            <div style="font-size:12px; color:#999; margin-top:5px;">
+                ⚠️ Görsel boyutu maksimum 3MB olmalıdır
+            </div>
+            <button class="btn-main" id="submitBtn" style="width:100%; background:#28a745;" onclick="submitAday()">📤
+                Başvuruyu Gönder</button>
+            <button onclick="document.getElementById('uploadModal').style.display='none'"
+                style="width:100%; margin-top:10px; background:none; border:none; color:#666; cursor:pointer;">İptal</button>
+        </div>
+    </div>
 
-    function switchTab(g) {
-        document.getElementById('paneMale').classList.toggle('mobile-active', g === 'male');
-        document.getElementById('paneFemale').classList.toggle('mobile-active', g === 'female');
-        document.getElementById('btnM').classList.toggle('active-male', g === 'male');
-        document.getElementById('btnF').classList.toggle('active-female', g === 'female');
-    }
+    <div id="voteModal" class="modal">
+        <div class="modal-content">
+            <h3 id="vTitle">Şehir Adayları</h3>
+            <div id="candidateList" style="margin-top:15px; max-height:400px; overflow-y:auto;"></div>
+            <button onclick="document.getElementById('voteModal').style.display='none'"
+                style="width:100%; margin-top:15px; padding:10px;">Kapat</button>
+        </div>
+    </div>
 
-    function renderMaps() {
-        const draw = (id, gender) => {
-            let defs = "<defs>";
-            let content = "";
-            for (let i = 1; i <= 81; i++) {
-                const leader = (window.adaylar || []).filter(a => a.city == i && a.gender == gender).sort((a,b)=>b.votes-a.votes)[0];
-                let fill = "#fff";
-                if(leader) {
-                    defs += `<pattern id="p-${gender}-${i}" width="1" height="1" patternUnits="objectBoundingBox"><image href="${leader.img}" width="95" height="65" preserveAspectRatio="xMidYMid slice"/></pattern>`;
-                    fill = `url(#p-${gender}-${i})`;
-                }
-                const x = ((i-1)%9)*95; 
-                const y = Math.floor((i-1)/9)*65;
-                content += `<rect x="${x}" y="${y}" width="90" height="60" class="city-rect" style="fill:${fill}" onclick="openCity(${i},'${gender}')"/>
-                <text x="${x+45}" y="${y+25}" class="city-label">${i}</text>
-                <text x="${x+45}" y="${y+42}" class="city-label" style="font-size:5px; opacity:0.6;">${cityNames[i-1]}</text>`;
+    <script>
+        const cityNames = ["Adana", "Adıyaman", "Afyon", "Ağrı", "Amasya", "Ankara", "Antalya", "Artvin", "Aydın", "Balıkesir", "Bilecik", "Bingöl", "Bitlis", "Bolu", "Burdur", "Bursa", "Çanakkale", "Çankırı", "Çorum", "Denizli", "Diyarbakır", "Edirne", "Elazığ", "Erzincan", "Erzurum", "Eskişehir", "Gaziantep", "Giresun", "Gümüşhane", "Hakkari", "Hatay", "Isparta", "Mersin", "İstanbul", "İzmir", "Kars", "Kastamonu", "Kayseri", "Kırklareli", "Kırşehir", "Kocaeli", "Konya", "Kütahya", "Malatya", "Manisa", "K.Maraş", "Mardin", "Muğla", "Muş", "Nevşehir", "Niğde", "Ordu", "Rize", "Sakarya", "Samsun", "Siirt", "Sinop", "Sivas", "Tekirdağ", "Tokat", "Trabzon", "Tunceli", "Şanlıurfa", "Uşak", "Van", "Yozgat", "Zonguldak", "Aksaray", "Bayburt", "Karaman", "Kırıkkale", "Batman", "Şırnak", "Bartın", "Ardahan", "Iğdır", "Yalova", "Karabük", "Kilis", "Osmaniye", "Düzce"];
+
+        window.cityNames = cityNames;
+
+        function switchTab(g) {
+            document.getElementById('paneMale').classList.toggle('mobile-active', g === 'male');
+            document.getElementById('paneFemale').classList.toggle('mobile-active', g === 'female');
+            document.getElementById('paneWinners').classList.toggle('mobile-active', g === 'winners');
+            document.getElementById('btnM').classList.toggle('active-male', g === 'male');
+            document.getElementById('btnF').classList.toggle('active-female', g === 'female');
+            document.getElementById('btnW').classList.toggle('active-winners', g === 'winners');
+
+            // Türkiye Birincileri sekmesi açıldığında render et
+            if (g === 'winners') {
+                renderWinners();
             }
-            const svgEl = document.getElementById(id);
-            if(svgEl) svgEl.innerHTML = `<svg viewBox="-5 -5 860 600">${defs}</defs>${content}</svg>`;
-        };
-        draw('svgMale', 'male'); 
-        draw('svgFemale', 'female');
-        updateBtn();
-    }
-
-    function updateBtn() {
-        const joinArea = document.getElementById('joinArea');
-        if(!joinArea) return;
-        if(localStorage.getItem('user_has_joined')) {
-            joinArea.innerHTML = `<button class="btn-main" style="background:#28a745" disabled>✓ Başvurunuz Alındı</button>`;
-        } else {
-            joinArea.innerHTML = `<button class="btn-main" onclick="document.getElementById('uploadModal').style.display='flex'">🏆 Yarışmacı Ol</button>`;
         }
-    }
 
-    function openCity(cityId, gender) {
-        const filtered = (window.adaylar || []).filter(a => a.city == cityId && a.gender == gender).sort((a,b)=>b.votes-a.votes);
-        document.getElementById('vTitle').innerText = cityId + " - " + cityNames[cityId-1] + " Adayları";
-        const list = document.getElementById('candidateList');
-        
-        if(filtered.length === 0) {
-            list.innerHTML = "<p style='text-align:center; padding:20px; color:#999;'>Bu şehirde henüz aday yok.</p>";
-        } else {
-            list.innerHTML = filtered.map((a, idx) => `
+        // Rastgele sıralama fonksiyonu
+        function shuffleArray(array) {
+            const arr = [...array];
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        }
+
+        // Her ilin birincilerini bul
+        function getCityWinners() {
+            const maleWinners = [];
+            const femaleWinners = [];
+
+            for (let i = 1; i <= 81; i++) {
+                const maleLeader = (window.adaylar || [])
+                    .filter(a => a.city == i && a.gender == 'male')
+                    .sort((a, b) => b.votes - a.votes)[0];
+                const femaleLeader = (window.adaylar || [])
+                    .filter(a => a.city == i && a.gender == 'female')
+                    .sort((a, b) => b.votes - a.votes)[0];
+
+                if (maleLeader) maleWinners.push({ ...maleLeader, cityName: cityNames[i - 1] });
+                if (femaleLeader) femaleWinners.push({ ...femaleLeader, cityName: cityNames[i - 1] });
+            }
+
+            return { maleWinners, femaleWinners };
+        }
+
+        // Türkiye Birincileri sekmesini render et
+        function renderWinners() {
+            const container = document.getElementById('winnersContent');
+            if (!container) return;
+
+            const { maleWinners, femaleWinners } = getCityWinners();
+
+            // Rastgele sırala (oy sayısı gizli olacağı için)
+            const shuffledMale = shuffleArray(maleWinners);
+            const shuffledFemale = shuffleArray(femaleWinners);
+
+            const renderCard = (a, showVotes = false) => `
+            <div style="background: rgba(255,255,255,0.1); border-radius: 15px; padding: 15px; text-align: center; width: 140px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2);">
+                <img src="${a.img}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 3px solid #ffd700; margin-bottom: 10px;">
+                <div style="color: white; font-weight: bold; font-size: 13px; margin-bottom: 5px;">${a.name}</div>
+                <div style="color: #ffd700; font-size: 11px; margin-bottom: 5px;">${a.city} - ${a.cityName}</div>
+                ${a.instagram ? `<a href="https://instagram.com/${a.instagram.replace('@', '')}" target="_blank" style="color: #E4405F; font-size: 10px; text-decoration: none;">📷 @${a.instagram.replace('@', '')}</a>` : ''}
+                <button onclick="vote('${a.id}')" style="margin-top: 10px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 11px; font-weight: bold; width: 100%;">
+                    ⭐ Oy Ver
+                </button>
+            </div>
+        `;
+
+            container.innerHTML = `
+            <div style="margin-bottom: 30px;">
+                <h2 style="color: #0084ff; text-align: center; margin-bottom: 20px; font-size: 20px;">
+                    👨 Erkek İl Birincileri (${shuffledMale.length} İl)
+                </h2>
+                <div style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: center;">
+                    ${shuffledMale.length > 0 ? shuffledMale.map(a => renderCard(a)).join('') : '<p style="color: #999; text-align: center; width: 100%;">Henüz erkek birincisi yok</p>'}
+                </div>
+            </div>
+            
+            <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.2); margin: 30px 0;">
+            
+            <div>
+                <h2 style="color: #ff007b; text-align: center; margin-bottom: 20px; font-size: 20px;">
+                    👩 Kadın İl Birincileri (${shuffledFemale.length} İl)
+                </h2>
+                <div style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: center;">
+                    ${shuffledFemale.length > 0 ? shuffledFemale.map(a => renderCard(a)).join('') : '<p style="color: #999; text-align: center; width: 100%;">Henüz kadın birincisi yok</p>'}
+                </div>
+            </div>
+        `;
+        }
+
+        function renderMaps() {
+            const draw = (id, gender) => {
+                let defs = "<defs>";
+                let content = "";
+                for (let i = 1; i <= 81; i++) {
+                    const leader = (window.adaylar || []).filter(a => a.city == i && a.gender == gender).sort((a, b) => b.votes - a.votes)[0];
+                    let fill = "#fff";
+                    if (leader) {
+                        defs += `<pattern id="p-${gender}-${i}" width="1" height="1" patternUnits="objectBoundingBox"><image href="${leader.img}" width="95" height="65" preserveAspectRatio="xMidYMid slice"/></pattern>`;
+                        fill = `url(#p-${gender}-${i})`;
+                    }
+                    const x = ((i - 1) % 9) * 95;
+                    const y = Math.floor((i - 1) / 9) * 65;
+                    content += `<rect x="${x}" y="${y}" width="90" height="60" class="city-rect" style="fill:${fill}" onclick="openCity(${i},'${gender}')"/>
+                <text x="${x + 45}" y="${y + 25}" class="city-label">${i}</text>
+                <text x="${x + 45}" y="${y + 42}" class="city-label" style="font-size:5px; opacity:0.6;">${cityNames[i - 1]}</text>`;
+                }
+                const svgEl = document.getElementById(id);
+                if (svgEl) svgEl.innerHTML = `<svg viewBox="-5 -5 860 600">${defs}</defs>${content}</svg>`;
+            };
+            draw('svgMale', 'male');
+            draw('svgFemale', 'female');
+            updateBtn();
+        }
+
+        function updateBtn() {
+            const joinArea = document.getElementById('joinArea');
+            if (!joinArea) return;
+            if (localStorage.getItem('user_has_joined')) {
+                joinArea.innerHTML = `<button class="btn-main" style="background:#28a745" disabled>✓ Başvurunuz Alındı</button>`;
+            } else {
+                joinArea.innerHTML = `<button class="btn-main" onclick="document.getElementById('uploadModal').style.display='flex'">🏆 Yarışmacı Ol</button>`;
+            }
+        }
+
+        function openCity(cityId, gender) {
+            const filtered = (window.adaylar || []).filter(a => a.city == cityId && a.gender == gender).sort((a, b) => b.votes - a.votes);
+            document.getElementById('vTitle').innerText = cityId + " - " + cityNames[cityId - 1] + " Adayları";
+            const list = document.getElementById('candidateList');
+
+            if (filtered.length === 0) {
+                list.innerHTML = "<p style='text-align:center; padding:20px; color:#999;'>Bu şehirde henüz aday yok.</p>";
+            } else {
+                list.innerHTML = filtered.map((a, idx) => `
                 <div style="display:flex; align-items:center; margin-bottom:12px; padding:12px; border:1px solid ${idx === 0 ? '#ffd700' : '#eee'}; border-radius:10px; background:${idx === 0 ? '#fffbf0' : 'white'};">
                     ${idx === 0 ? '<span style="font-size:24px; margin-right:8px;">👑</span>' : ''}
                     <img src="${a.img}" style="width:60px; height:60px; border-radius:50%; object-fit:cover; margin-right:12px; border:2px solid ${idx === 0 ? '#ffd700' : '#ddd'};">
                     <div style="flex:1;">
                         <b style="font-size:15px;">${a.name}</b>
-                        ${a.instagram ? `<br><a href="https://instagram.com/${a.instagram.replace('@','')}" target="_blank" class="candidate-instagram">📷 @${a.instagram.replace('@','')}</a>` : ''}
+                        ${a.instagram ? `<br><a href="https://instagram.com/${a.instagram.replace('@', '')}" target="_blank" class="candidate-instagram">📷 @${a.instagram.replace('@', '')}</a>` : ''}
                         <br><small style="color:#666;">${a.votes} Oy</small>
                     </div>
                     <button onclick="vote('${a.id}')" style="background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); color:white; border:none; padding:10px 16px; border-radius:8px; cursor:pointer; font-weight:bold; box-shadow:0 2px 8px rgba(102,126,234,0.3);">
@@ -345,14 +685,15 @@
                     </button>
                 </div>
             `).join('');
-        }
-        
-        document.getElementById('voteModal').style.display = 'flex';
-    }
+            }
 
-    // İlk render
-    renderMaps();
-    updateBtn();
-</script>
+            document.getElementById('voteModal').style.display = 'flex';
+        }
+
+        // İlk render
+        renderMaps();
+        updateBtn();
+    </script>
 </body>
+
 </html>
