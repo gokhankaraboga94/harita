@@ -987,10 +987,7 @@
                 for (let i = 1; i <= 81; i++) {
                     const leader = (window.adaylar || []).filter(a => a.city == i && a.gender == gender).sort((a, b) => b.votes - a.votes)[0];
                     let fill = "#fff";
-                    if (leader) {
-                        defs += `<pattern id="p-${gender}-${i}" width="1" height="1" patternUnits="objectBoundingBox"><image href="${leader.img}" width="95" height="65" preserveAspectRatio="xMidYMid slice"/></pattern>`;
-                        fill = `url(#p-${gender}-${i})`;
-                    }
+                    // Lider varsa da görseli gösterme, sadece boş beyaz kutu
                     const x = ((i - 1) % 9) * 95;
                     const y = Math.floor((i - 1) / 9) * 65;
                     content += `<rect x="${x}" y="${y}" width="90" height="60" class="city-rect" style="fill:${fill}" onclick="openCity(${i},'${gender}')"/>
