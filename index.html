@@ -461,6 +461,30 @@
             color: var(--female);
         }
 
+.city-none {
+    fill: #e0e0e0 !important;
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.city-single {
+    fill: #ffc107 !important;
+    opacity: 0.8;
+}
+
+.city-both {
+    fill: #28a745 !important;
+    opacity: 1;
+}
+
+.city-both:hover,
+.city-single:hover {
+    stroke: #000;
+    stroke-width: 2px;
+}
+
+
+
         .active-winners {
             border-bottom: 4px solid #ffd700;
             opacity: 1;
@@ -1044,6 +1068,20 @@
         // İlk render
         renderMaps();
         updateBtn();
+
+function getCityCandidateStatus(cityId) {
+    const list = window.adaylar || [];
+
+    const hasMale = list.some(a => a.city === cityId && a.gender === 'male');
+    const hasFemale = list.some(a => a.city === cityId && a.gender === 'female');
+
+    if (hasMale && hasFemale) return 'both';
+    if (hasMale || hasFemale) return 'single';
+    return 'none';
+}
+
+
+
     </script>
 </body>
 
