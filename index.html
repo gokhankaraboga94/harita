@@ -110,16 +110,26 @@
             }
         };
 
-        // Şehir Oylaması - Her şehirde 1 erkek + 1 kadın oy hakkı
+        // Şehir Oylaması - Kullanıcı SADECE 1 şehirde oy kullanabilir (1 erkek + 1 kadın)
         window.vote = async (id) => {
             const aday = window.adaylar.find(a => a.id === id);
             if (!aday) return alert("Aday bulunamadı!");
 
             const cityId = aday.city;
             const gender = aday.gender;
-            const voteKey = `city_vote_${cityId}_${gender}`;
 
-            // Aynı şehirde aynı cinsiyetten birine zaten oy verildi mi?
+            // Kullanıcının hangi şehirde oy kullandığını kontrol et
+            const userVoteCity = localStorage.getItem('user_vote_city');
+
+            // Eğer daha önce farklı bir şehirde oy kullandıysa, engelle
+            if (userVoteCity && parseInt(userVoteCity) !== cityId) {
+                const votedCityName = cityNames[parseInt(userVoteCity) - 1];
+                return alert(`⚠️ Sadece kendi ilinizde oy kullanabilirsiniz!\n\nDaha önce ${votedCityName} ilinde oy kullandınız.\n\nToplam oy haklarınız:\n• Şehir: 1 erkek + 1 kadın (tek şehir)\n• Türkiye Birinciliği: 1 erkek + 1 kadın`);
+            }
+
+            const voteKey = `city_vote_${gender}`;
+
+            // Bu cinsiyette oy kullandı mı?
             if (localStorage.getItem(voteKey)) {
                 const votedId = localStorage.getItem(voteKey);
                 if (votedId === id) {
@@ -131,7 +141,9 @@
 
             await update(ref(db, `adaylar/${id}`), { votes: (aday.votes || 0) + 1 });
             localStorage.setItem(voteKey, id);
-            alert(`✅ Oyunuz kaydedildi!\n\n📍 ${cityNames[cityId - 1]} - ${gender === 'male' ? 'Erkek' : 'Kadın'}\n\nℹ️ Her şehirde 1 erkek ve 1 kadın için oy kullanabilirsiniz.`);
+            localStorage.setItem('user_vote_city', cityId.toString());
+
+            alert(`✅ Oyunuz kaydedildi!\n\n📍 ${cityNames[cityId - 1]} - ${gender === 'male' ? 'Erkek' : 'Kadın'}\n\nℹ️ Toplam oy haklarınız:\n• Şehir: 1 erkek + 1 kadın (sadece bu şehir)\n• Türkiye Birinciliği: 1 erkek + 1 kadın`);
             document.getElementById('voteModal').style.display = 'none';
         };
 
