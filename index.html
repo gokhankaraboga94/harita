@@ -5,10 +5,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>harita.info | Türkiye'nin Enleri</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, push, onValue, update, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getDatabase, ref, push, onValue, update, remove, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAKkEHHeHnfHSN0MpEcJoK4Ix9o2PFbPY8",
@@ -27,19 +30,51 @@
         window.db = db;
         window.adaylar = [];
         window.bekleyenAdaylar = [];
+        window.cityWinnersCache = { male: {}, female: {} };
 
-        // Onaylı Adaylar
+        // Şehir birincilerini hesapla ve cache'le
+        function updateCityWinnersCache() {
+            const maleWinners = {};
+            const femaleWinners = {};
+
+            for (let i = 1; i <= 81; i++) {
+                const maleLeader = (window.adaylar || [])
+                    .filter(a => a.city == i && a.gender === 'male')
+                    .sort((a, b) => (b.votes || 0) - (a.votes || 0))[0];
+                
+                const femaleLeader = (window.adaylar || [])
+                    .filter(a => a.city == i && a.gender === 'female')
+                    .sort((a, b) => (b.votes || 0) - (a.votes || 0))[0];
+
+                if (maleLeader) maleWinners[i] = maleLeader;
+                if (femaleLeader) femaleWinners[i] = femaleLeader;
+            }
+
+            window.cityWinnersCache = { male: maleWinners, female: femaleWinners };
+        }
+
+        // Onaylı Adaylar - Gerçek zamanlı dinleme
         onValue(ref(db, 'adaylar'), (snapshot) => {
             const data = snapshot.val();
             window.adaylar = data ? Object.keys(data).map(k => ({ id: k, ...data[k] })) : [];
+            updateCityWinnersCache();
             renderMaps();
+            
+            // Winners sekmesi açıksa güncelle
+            if (document.getElementById('paneWinners').classList.contains('mobile-active')) {
+                renderWinners();
+            }
         });
 
-        // Bekleyen Adaylar (Moderasyon)
+        // Bekleyen Adaylar (Moderasyon) - Gerçek zamanlı
         onValue(ref(db, 'bekleyen_adaylar'), (snapshot) => {
             const data = snapshot.val();
             window.bekleyenAdaylar = data ? Object.keys(data).map(k => ({ id: k, ...data[k] })) : [];
-            if (isAdminPage()) renderModPanel();
+            
+            // Admin sayfasındaysa hemen render et
+            if (isAdminPage()) {
+                renderModPanel();
+            }
         });
 
         // Görsel Base64'e Çevirme
@@ -54,36 +89,46 @@
 
         // Yarışmacı Başvurusu
         window.submitAday = async () => {
-            if (localStorage.getItem('user_has_joined')) return alert("Zaten katıldınız!");
+            if (localStorage.getItem('user_has_joined')) return showToast("Zaten katıldınız!", "warning");
 
-            // Veritabanı limiti kontrolü
             if (window.dbSizeLimitReached) {
-                return alert("⚠️ Üzgünüz! Veritabanı kapasitesi doldu. Şu anda yeni başvuru kabul edilemiyor.");
+                return showToast("Veritabanı kapasitesi doldu. Yeni başvuru kabul edilemiyor.", "error");
             }
 
             const gender = document.getElementById('upGender').value;
             const city = parseInt(document.getElementById('upCity').value);
-            const name = document.getElementById('upName').value;
+            const name = document.getElementById('upName').value.trim();
             const instagram = document.getElementById('upInstagram').value.trim();
             const file = document.getElementById('upFile').files[0];
             const privacyAccepted = document.getElementById('privacyAccept').checked;
 
-            // Gizlilik politikası kontrolü
             if (!privacyAccepted) {
-                return alert("⚠️ Devam etmek için Gizlilik Politikası'nı kabul etmeniz gerekmektedir.");
+                return showToast("Gizlilik Politikası'nı kabul etmeniz gerekmektedir.", "error");
+            }
+
+            // Instagram zorunlu kontrolü
+            if (!instagram) {
+                return showToast("Instagram kullanıcı adı zorunludur!", "error");
+            }
+
+            // Instagram format kontrolü
+            const igUsername = instagram.replace('@', '').trim();
+            if (igUsername.length < 1 || !/^[a-zA-Z0-9._]+$/.test(igUsername)) {
+                return showToast("Geçerli bir Instagram kullanıcı adı girin!", "error");
             }
 
             if (!city || !name || !file || city < 1 || city > 81) {
-                return alert("Lütfen tüm zorunlu alanları doldurun!");
+                return showToast("Lütfen tüm zorunlu alanları doldurun!", "error");
             }
 
             if (file.size > 3 * 1024 * 1024) {
-                return alert("Görsel boyutu 3MB'dan küçük olmalı!");
+                return showToast("Görsel boyutu 3MB'dan küçük olmalı!", "error");
             }
 
             try {
-                document.getElementById('submitBtn').disabled = true;
-                document.getElementById('submitBtn').innerText = "Yükleniyor...";
+                const submitBtn = document.getElementById('submitBtn');
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="loading-spinner"></span> Yükleniyor...';
 
                 const base64 = await fileToBase64(file);
 
@@ -92,50 +137,65 @@
                     gender,
                     city,
                     name,
-                    instagram: instagram || null,
+                    instagram: igUsername,
                     img: base64,
                     votes: 0,
+                    turkeyVotes: 0,
                     status: 'pending',
                     createdAt: Date.now()
                 });
 
                 localStorage.setItem('user_has_joined', 'true');
-                alert("Başvurunuz alındı! Admin onayından sonra yayınlanacak.");
-                document.getElementById('uploadModal').style.display = 'none';
-                location.reload();
+                showToast("Başvurunuz alındı! Moderatör onayından sonra yayınlanacak.", "success");
+                closeModal('uploadModal');
+                updateBtn();
             } catch (e) {
-                alert("Hata: " + e.message);
-                document.getElementById('submitBtn').disabled = false;
-                document.getElementById('submitBtn').innerText = "📤 Başvuruyu Gönder";
+                showToast("Hata: " + e.message, "error");
+                const submitBtn = document.getElementById('submitBtn');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '📤 Başvuruyu Gönder';
             }
         };
 
-        // Şehir Oylaması - Kullanıcı SADECE 1 şehirde oy kullanabilir (1 erkek + 1 kadın)
+        // Toast Bildirimi
+        window.showToast = (message, type = 'info') => {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.innerHTML = `
+                <span class="toast-icon">${type === 'success' ? '✓' : type === 'error' ? '✕' : type === 'warning' ? '⚠' : 'ℹ'}</span>
+                <span class="toast-message">${message}</span>
+            `;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => toast.classList.add('show'), 10);
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        };
+
+        // Şehir Oylaması
         window.vote = async (id) => {
             const aday = window.adaylar.find(a => a.id === id);
-            if (!aday) return alert("Aday bulunamadı!");
+            if (!aday) return showToast("Aday bulunamadı!", "error");
 
             const cityId = aday.city;
             const gender = aday.gender;
-
-            // Kullanıcının hangi şehirde oy kullandığını kontrol et
             const userVoteCity = localStorage.getItem('user_vote_city');
 
-            // Eğer daha önce farklı bir şehirde oy kullandıysa, engelle
             if (userVoteCity && parseInt(userVoteCity) !== cityId) {
                 const votedCityName = cityNames[parseInt(userVoteCity) - 1];
-                return alert(`⚠️ Sadece kendi ilinizde oy kullanabilirsiniz!\n\nDaha önce ${votedCityName} ilinde oy kullandınız.\n\nToplam oy haklarınız:\n• Şehir: 1 erkek + 1 kadın (tek şehir)\n• Türkiye Birinciliği: 1 erkek + 1 kadın`);
+                return showToast(`Sadece kendi ilinizde oy kullanabilirsiniz! Daha önce ${votedCityName} ilinde oy kullandınız.`, "warning");
             }
 
             const voteKey = `city_vote_${gender}`;
 
-            // Bu cinsiyette oy kullandı mı?
             if (localStorage.getItem(voteKey)) {
                 const votedId = localStorage.getItem(voteKey);
                 if (votedId === id) {
-                    return alert("Bu adaya zaten oy verdiniz!");
+                    return showToast("Bu adaya zaten oy verdiniz!", "warning");
                 } else {
-                    return alert(`${cityNames[cityId - 1]} ilinde ${gender === 'male' ? 'erkek' : 'kadın'} kategorisinde zaten oy kullandınız!`);
+                    return showToast(`${cityNames[cityId - 1]} ilinde ${gender === 'male' ? 'erkek' : 'kadın'} kategorisinde zaten oy kullandınız!`, "warning");
                 }
             }
 
@@ -143,61 +203,105 @@
             localStorage.setItem(voteKey, id);
             localStorage.setItem('user_vote_city', cityId.toString());
 
-            alert(`✅ Oyunuz kaydedildi!\n\n📍 ${cityNames[cityId - 1]} - ${gender === 'male' ? 'Erkek' : 'Kadın'}\n\nℹ️ Toplam oy haklarınız:\n• Şehir: 1 erkek + 1 kadın (sadece bu şehir)\n• Türkiye Birinciliği: 1 erkek + 1 kadın`);
-            document.getElementById('voteModal').style.display = 'none';
+            showToast(`Oyunuz kaydedildi! ${cityNames[cityId - 1]} - ${gender === 'male' ? 'Erkek' : 'Kadın'}`, "success");
+            closeModal('voteModal');
         };
 
-        // Türkiye Birinciliği Oylaması - Ayrı 1 erkek + 1 kadın oy hakkı
+        // Türkiye Birinciliği Oylaması
         window.voteTurkey = async (id) => {
             const aday = window.adaylar.find(a => a.id === id);
-            if (!aday) return alert("Aday bulunamadı!");
+            if (!aday) return showToast("Aday bulunamadı!", "error");
 
             const gender = aday.gender;
             const voteKey = `turkey_vote_${gender}`;
 
-            // Türkiye oylamasında bu cinsiyetten birine zaten oy verildi mi?
             if (localStorage.getItem(voteKey)) {
                 const votedId = localStorage.getItem(voteKey);
                 if (votedId === id) {
-                    return alert("Bu adaya zaten Türkiye Birinciliği oyunuzu verdiniz!");
+                    return showToast("Bu adaya zaten Türkiye Birinciliği oyunuzu verdiniz!", "warning");
                 } else {
-                    return alert(`Türkiye Birinciliği'nde ${gender === 'male' ? 'erkek' : 'kadın'} kategorisinde zaten oy kullandınız!`);
+                    return showToast(`Türkiye Birinciliği'nde ${gender === 'male' ? 'erkek' : 'kadın'} kategorisinde zaten oy kullandınız!`, "warning");
                 }
             }
 
-            // turkeyVotes ayrı sayaç olarak kullanılıyor
             await update(ref(db, `adaylar/${id}`), { turkeyVotes: (aday.turkeyVotes || 0) + 1 });
             localStorage.setItem(voteKey, id);
-            alert(`🏆 Türkiye Birinciliği oyunuz kaydedildi!\n\n${gender === 'male' ? '👨 Erkek' : '👩 Kadın'} kategorisi\n\nℹ️ Türkiye Birinciliği'nde 1 erkek ve 1 kadın için oy kullanabilirsiniz.`);
+            showToast(`Türkiye Birinciliği oyunuz kaydedildi! ${gender === 'male' ? 'Erkek' : 'Kadın'} kategorisi`, "success");
         };
 
-        // Admin: Başvuruyu Onayla
+        // Admin: Başvuruyu Onayla - Duplicate önleme
         window.approveAday = async (id) => {
             const aday = window.bekleyenAdaylar.find(a => a.id === id);
-            if (!aday) return;
+            if (!aday) return showToast("Aday bulunamadı!", "error");
 
-            const newAdayRef = push(ref(db, 'adaylar'));
-            await update(newAdayRef, {
-                gender: aday.gender,
-                city: aday.city,
-                name: aday.name,
-                instagram: aday.instagram,
-                img: aday.img,
-                votes: 0
-            });
+            // Onay butonunu devre dışı bırak
+            const btn = document.querySelector(`[data-approve-id="${id}"]`);
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="loading-spinner-small"></span>';
+            }
 
-            await remove(ref(db, `bekleyen_adaylar/${id}`));
-            alert("Başvuru onaylandı!");
+            try {
+                // Aynı şehir ve cinsiyette duplicate kontrolü
+                const existingAdaylar = window.adaylar.filter(
+                    a => a.city === aday.city && a.gender === aday.gender && a.name === aday.name
+                );
+
+                if (existingAdaylar.length > 0) {
+                    showToast("Bu aday zaten onaylanmış!", "warning");
+                    await remove(ref(db, `bekleyen_adaylar/${id}`));
+                    return;
+                }
+
+                // Önce bekleyen adaydan sil
+                await remove(ref(db, `bekleyen_adaylar/${id}`));
+
+                // Sonra adaylara ekle
+                const newAdayRef = push(ref(db, 'adaylar'));
+                await update(newAdayRef, {
+                    gender: aday.gender,
+                    city: aday.city,
+                    name: aday.name,
+                    instagram: aday.instagram,
+                    img: aday.img,
+                    votes: 0,
+                    turkeyVotes: 0,
+                    createdAt: aday.createdAt || Date.now()
+                });
+
+                showToast("Başvuru onaylandı!", "success");
+            } catch (e) {
+                showToast("Hata: " + e.message, "error");
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '✓ Onayla';
+                }
+            }
         };
 
         // Admin: Başvuruyu Reddet
         window.rejectAday = async (id) => {
             if (!confirm("Bu başvuruyu reddetmek istediğinize emin misiniz?")) return;
-            await remove(ref(db, `bekleyen_adaylar/${id}`));
-            alert("Başvuru reddedildi.");
+            
+            const btn = document.querySelector(`[data-reject-id="${id}"]`);
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="loading-spinner-small"></span>';
+            }
+
+            try {
+                await remove(ref(db, `bekleyen_adaylar/${id}`));
+                showToast("Başvuru reddedildi.", "info");
+            } catch (e) {
+                showToast("Hata: " + e.message, "error");
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '✗ Reddet';
+                }
+            }
         };
 
-        // Admin Panelini Render Et
+        // Admin Panelini Render Et - Optimized
         window.renderModPanel = () => {
             const panel = document.getElementById('modPanel');
             if (!panel) return;
@@ -206,106 +310,98 @@
             if (count) count.innerText = window.bekleyenAdaylar.length;
 
             if (window.bekleyenAdaylar.length === 0) {
-                panel.innerHTML = '<p style="text-align:center; padding:20px; color:#999;">Bekleyen başvuru yok.</p>';
+                panel.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">📭</div>
+                        <p>Bekleyen başvuru yok</p>
+                    </div>
+                `;
                 return;
             }
 
+            // Lazy loading için sadece görünen görselleri yükle
             panel.innerHTML = window.bekleyenAdaylar.map(a => `
-                <div style="border:1px solid #ddd; border-radius:10px; padding:15px; margin-bottom:15px; background:#fff;">
-                    <div style="display:flex; align-items:center; gap:15px; margin-bottom:10px;">
-                        <img src="${a.img}" style="width:80px; height:80px; border-radius:10px; object-fit:cover;">
-                        <div style="flex:1;">
-                            <h3 style="margin:0 0 5px 0;">${a.name}</h3>
-                            <p style="margin:0; color:#666; font-size:14px;">
-                                <strong>Şehir:</strong> ${a.city} - ${window.cityNames[a.city - 1]}<br>
-                                <strong>Cinsiyet:</strong> ${a.gender === 'male' ? 'Erkek' : 'Kadın'}<br>
-                                ${a.instagram ? `<strong>Instagram:</strong> <a href="https://instagram.com/${a.instagram.replace('@', '')}" target="_blank">@${a.instagram.replace('@', '')}</a>` : '<em>Instagram yok</em>'}
-                            </p>
+                <div class="pending-card" data-id="${a.id}">
+                    <div class="pending-card-header">
+                        <img src="${a.img}" alt="${a.name}" class="pending-avatar" loading="lazy">
+                        <div class="pending-info">
+                            <h3>${a.name}</h3>
+                            <div class="pending-meta">
+                                <span class="badge badge-city">${a.city} - ${window.cityNames[a.city - 1]}</span>
+                                <span class="badge ${a.gender === 'male' ? 'badge-male' : 'badge-female'}">
+                                    ${a.gender === 'male' ? '♂ Erkek' : '♀ Kadın'}
+                                </span>
+                            </div>
+                            <a href="https://instagram.com/${a.instagram}" target="_blank" class="instagram-link">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                                @${a.instagram}
+                            </a>
                         </div>
                     </div>
-                    <div style="display:flex; gap:10px;">
-                        <button onclick="approveAday('${a.id}')" style="flex:1; background:#28a745; color:white; border:none; padding:10px; border-radius:8px; cursor:pointer; font-weight:bold;">✓ Onayla</button>
-                        <button onclick="rejectAday('${a.id}')" style="flex:1; background:#dc3545; color:white; border:none; padding:10px; border-radius:8px; cursor:pointer; font-weight:bold;">✗ Reddet</button>
+                    <div class="pending-actions">
+                        <button class="btn-approve" data-approve-id="${a.id}" onclick="approveAday('${a.id}')">✓ Onayla</button>
+                        <button class="btn-reject" data-reject-id="${a.id}" onclick="rejectAday('${a.id}')">✗ Reddet</button>
                     </div>
                 </div>
             `).join('');
 
-            // Türkiye birincilerini de render et
             renderTurkeyWinnersAdmin();
+            checkDatabaseSize();
         };
 
-        // Admin Panel - Türkiye Birincileri (Gizli - Sadece Admin Görür)
+        // Admin Panel - Türkiye Birincileri
         window.renderTurkeyWinnersAdmin = () => {
             const container = document.getElementById('turkeyWinnersAdmin');
             if (!container) return;
 
-            const adaylar = window.adaylar || [];
-            const cityNames = window.cityNames || [];
+            const { maleWinners, femaleWinners } = getCityWinners();
 
-            // Her ilin birincilerini bul
-            const maleWinners = [];
-            const femaleWinners = [];
-
-            for (let i = 1; i <= 81; i++) {
-                const maleLeader = adaylar
-                    .filter(a => a.city == i && a.gender == 'male')
-                    .sort((a, b) => b.votes - a.votes)[0];
-                const femaleLeader = adaylar
-                    .filter(a => a.city == i && a.gender == 'female')
-                    .sort((a, b) => b.votes - a.votes)[0];
-
-                if (maleLeader) maleWinners.push({ ...maleLeader, cityName: cityNames[i - 1] });
-                if (femaleLeader) femaleWinners.push({ ...femaleLeader, cityName: cityNames[i - 1] });
-            }
-
-            // Türkiye 1.'lerini bul (turkeyVotes'a göre - Türkiye oylaması ayrı)
             const turkeyMaleWinner = [...maleWinners].sort((a, b) => (b.turkeyVotes || 0) - (a.turkeyVotes || 0))[0];
             const turkeyFemaleWinner = [...femaleWinners].sort((a, b) => (b.turkeyVotes || 0) - (a.turkeyVotes || 0))[0];
 
             const renderWinnerCard = (winner, title, color) => {
                 if (!winner) {
                     return `
-                        <div style="flex: 1; min-width: 300px; background: #f8f9fa; border-radius: 15px; padding: 25px; text-align: center;">
-                            <h3 style="color: ${color}; margin-bottom: 15px;">${title}</h3>
-                            <p style="color: #999;">Henüz yeterli veri yok</p>
+                        <div class="winner-card winner-card-empty">
+                            <h3>${title}</h3>
+                            <p>Henüz yeterli veri yok</p>
                         </div>
                     `;
                 }
 
                 return `
-                    <div style="flex: 1; min-width: 300px; background: linear-gradient(135deg, ${color}22 0%, ${color}11 100%); border: 2px solid ${color}; border-radius: 15px; padding: 25px; text-align: center;">
-                        <h3 style="color: ${color}; margin-bottom: 15px;">🏆 ${title}</h3>
-                        <img src="${winner.img}" style="width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 4px solid #ffd700; margin-bottom: 15px;">
-                        <h2 style="margin: 0 0 10px 0; color: #333;">${winner.name}</h2>
-                        <p style="color: #666; margin: 5px 0;">
-                            <strong>İl:</strong> ${winner.city} - ${winner.cityName}
-                        </p>
-                        <div style="display: flex; justify-content: center; gap: 20px; margin: 15px 0;">
-                            <div style="background: #f8f9fa; padding: 10px 15px; border-radius: 8px;">
-                                <small style="color: #666;">Şehir Oyu</small>
-                                <p style="color: #0084ff; font-size: 20px; font-weight: bold; margin: 5px 0;">🗳️ ${winner.votes || 0}</p>
+                    <div class="winner-card" style="--accent-color: ${color}">
+                        <div class="winner-badge">🏆</div>
+                        <h3>${title}</h3>
+                        <img src="${winner.img}" alt="${winner.name}" class="winner-avatar">
+                        <h2>${winner.name}</h2>
+                        <p class="winner-city">${winner.city} - ${winner.cityName}</p>
+                        <div class="winner-stats">
+                            <div class="stat">
+                                <span class="stat-value">${winner.votes || 0}</span>
+                                <span class="stat-label">Şehir Oyu</span>
                             </div>
-                            <div style="background: #fff3cd; padding: 10px 15px; border-radius: 8px;">
-                                <small style="color: #856404;">Türkiye Oyu</small>
-                                <p style="color: #ffc107; font-size: 20px; font-weight: bold; margin: 5px 0;">🏆 ${winner.turkeyVotes || 0}</p>
+                            <div class="stat stat-highlight">
+                                <span class="stat-value">${winner.turkeyVotes || 0}</span>
+                                <span class="stat-label">Türkiye Oyu</span>
                             </div>
                         </div>
                         ${winner.instagram ? `
-                            <a href="https://instagram.com/${winner.instagram.replace('@', '')}" target="_blank" style="display: inline-block; background: #E4405F; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold;">
-                                📷 @${winner.instagram.replace('@', '')}
+                            <a href="https://instagram.com/${winner.instagram}" target="_blank" class="winner-instagram">
+                                📷 @${winner.instagram}
                             </a>
-                        ` : '<em style="color: #999;">Instagram yok</em>'}
+                        ` : ''}
                     </div>
                 `;
             };
 
             container.innerHTML = `
-                ${renderWinnerCard(turkeyMaleWinner, 'TÜRKİYE 1. ERKEK', '#0084ff')}
-                ${renderWinnerCard(turkeyFemaleWinner, 'TÜRKİYE 1. KADIN', '#ff007b')}
+                ${renderWinnerCard(turkeyMaleWinner, 'TÜRKİYE 1. ERKEK', '#0066cc')}
+                ${renderWinnerCard(turkeyFemaleWinner, 'TÜRKİYE 1. KADIN', '#cc0066')}
             `;
         };
 
-        // Sayfa Gösterme Fonksiyonu
+        // Sayfa Gösterme
         window.showPage = (page) => {
             document.getElementById('mainPage').style.display = 'none';
             document.getElementById('adminPage').style.display = 'none';
@@ -333,22 +429,23 @@
             }
         };
 
-        // Veritabanı boyutu kontrolü (1GB = 1073741824 bytes)
+        // Modal Kapatma
+        window.closeModal = (modalId) => {
+            document.getElementById(modalId).style.display = 'none';
+        };
+
+        // Veritabanı boyutu kontrolü
         window.dbSizeLimitReached = false;
 
         async function checkDatabaseSize() {
             try {
-                // Firebase'den toplam veri boyutunu tahmin et
                 const adaylarCount = (window.adaylar || []).length;
                 const bekleyenCount = (window.bekleyenAdaylar || []).length;
-
-                // Her aday ortalama 500KB (Base64 görsel) varsayımı
                 const estimatedSize = (adaylarCount + bekleyenCount) * 500 * 1024;
-                const limitSize = 1 * 1024 * 1024 * 1024; // 1GB
+                const limitSize = 1 * 1024 * 1024 * 1024;
 
                 window.dbSizeLimitReached = estimatedSize >= limitSize;
 
-                // Admin paneline boyut bilgisi ekle
                 const statsDiv = document.getElementById('dbStats');
                 if (statsDiv) {
                     const usedMB = (estimatedSize / (1024 * 1024)).toFixed(2);
@@ -356,14 +453,14 @@
                     const percentage = ((estimatedSize / limitSize) * 100).toFixed(1);
 
                     statsDiv.innerHTML = `
-                        <div style="background: ${percentage > 80 ? '#f8d7da' : '#d4edda'}; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
-                            <h4 style="margin: 0 0 10px 0;">📊 Veritabanı Durumu</h4>
-                            <p style="margin: 5px 0;">Kullanılan: <strong>${usedMB} MB</strong> / ${limitMB} MB</p>
-                            <div style="background: #e9ecef; border-radius: 5px; height: 20px; overflow: hidden;">
-                                <div style="background: ${percentage > 80 ? '#dc3545' : '#28a745'}; height: 100%; width: ${Math.min(percentage, 100)}%;"></div>
+                        <div class="db-stats ${percentage > 80 ? 'db-warning' : 'db-healthy'}">
+                            <h4>📊 Veritabanı Durumu</h4>
+                            <p>Kullanılan: <strong>${usedMB} MB</strong> / ${limitMB} MB</p>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${Math.min(percentage, 100)}%"></div>
                             </div>
-                            <p style="margin: 5px 0; font-size: 12px; color: #666;">${percentage}% kullanılıyor</p>
-                            ${window.dbSizeLimitReached ? '<p style="color: #dc3545; font-weight: bold;">⚠️ Limit aşıldı! Yeni başvurular kapatıldı.</p>' : ''}
+                            <p class="db-percentage">${percentage}% kullanılıyor</p>
+                            ${window.dbSizeLimitReached ? '<p class="db-alert">⚠️ Limit aşıldı! Yeni başvurular kapatıldı.</p>' : ''}
                         </div>
                     `;
                 }
@@ -385,7 +482,6 @@
             return window.location.pathname === '/gizlilik' || window.location.hash === '#/gizlilik';
         }
 
-        // Sayfa yüklendiğinde kontrol
         window.addEventListener('load', () => {
             if (isAdminPage()) {
                 showPage('admin');
@@ -394,237 +490,1320 @@
             } else if (isPrivacyPage()) {
                 showPage('privacy');
             }
-
-            // DB boyutunu kontrol et
-            setTimeout(checkDatabaseSize, 2000);
         });
     </script>
 
     <style>
         :root {
-            --male: #0084ff;
-            --female: #ff007b;
-            --dark: #121212;
+            --primary-blue: #0066cc;
+            --primary-pink: #cc0066;
+            --gold: #d4af37;
+            --dark: #0a0a0f;
+            --darker: #050508;
+            --surface: #12121a;
+            --surface-light: #1a1a24;
+            --text: #ffffff;
+            --text-muted: #8888a0;
+            --success: #00c853;
+            --warning: #ffab00;
+            --error: #ff1744;
+            --gradient-blue: linear-gradient(135deg, #0066cc 0%, #0099ff 100%);
+            --gradient-pink: linear-gradient(135deg, #cc0066 0%, #ff3399 100%);
+            --gradient-gold: linear-gradient(135deg, #d4af37 0%, #f4d03f 100%);
+            --shadow-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            --shadow-glow-blue: 0 0 40px rgba(0, 102, 204, 0.3);
+            --shadow-glow-pink: 0 0 40px rgba(204, 0, 102, 0.3);
         }
 
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            font-family: 'Segoe UI', sans-serif;
         }
 
         body {
-            background: #f8f9fa;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        header {
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
             background: var(--dark);
-            color: white;
-            padding: 15px;
-            text-align: center;
-            position: relative;
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
         }
 
-        .tab-controls {
+        /* Header */
+        header {
+            background: var(--darker);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            padding: 20px 30px;
             display: flex;
-            background: #fff;
-            border-bottom: 1px solid #ddd;
+            align-items: center;
+            justify-content: space-between;
             position: sticky;
             top: 0;
             z-index: 100;
+            backdrop-filter: blur(20px);
+        }
+
+        .logo {
+            font-family: 'Playfair Display', serif;
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--gold) 0%, #fff 50%, var(--gold) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.5px;
+        }
+
+        .logo span {
+            font-weight: 400;
+            opacity: 0.7;
+        }
+
+        /* Join Button */
+        .btn-join {
+            background: var(--gradient-gold);
+            color: var(--dark);
+            border: none;
+            padding: 12px 28px;
+            border-radius: 50px;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 20px rgba(212, 175, 55, 0.3);
+        }
+
+        .btn-join:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(212, 175, 55, 0.4);
+        }
+
+        .btn-join:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-joined {
+            background: var(--success);
+            box-shadow: 0 4px 20px rgba(0, 200, 83, 0.3);
+        }
+
+        /* Tab Controls */
+        .tab-controls {
+            display: flex;
+            background: var(--surface);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
         }
 
         .tab-btn {
             flex: 1;
-            padding: 15px;
+            padding: 18px 20px;
             border: none;
-            font-weight: bold;
+            background: transparent;
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 13px;
             cursor: pointer;
-            opacity: 0.5;
-            background: white;
-            font-size: 12px;
+            transition: all 0.3s ease;
+            position: relative;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
-        .active-male {
-            border-bottom: 4px solid var(--male);
-            opacity: 1;
-            color: var(--male);
+        .tab-btn::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 3px;
+            border-radius: 3px 3px 0 0;
+            transition: all 0.3s ease;
         }
 
-        .active-female {
-            border-bottom: 4px solid var(--female);
-            opacity: 1;
-            color: var(--female);
+        .tab-btn.active-male {
+            color: var(--primary-blue);
         }
 
-.city-none {
-    fill: #e0e0e0 !important;
-    opacity: 0.4;
-    cursor: not-allowed;
-}
-
-.city-single {
-    fill: #ffc107 !important;
-    opacity: 0.8;
-}
-
-.city-both {
-    fill: #28a745 !important;
-    opacity: 1;
-}
-
-.city-both:hover,
-.city-single:hover {
-    stroke: #000;
-    stroke-width: 2px;
-}
-
-
-
-        .active-winners {
-            border-bottom: 4px solid #ffd700;
-            opacity: 1;
-            color: #ffd700;
+        .tab-btn.active-male::after {
+            width: 60%;
+            background: var(--gradient-blue);
         }
 
+        .tab-btn.active-female {
+            color: var(--primary-pink);
+        }
+
+        .tab-btn.active-female::after {
+            width: 60%;
+            background: var(--gradient-pink);
+        }
+
+        .tab-btn.active-winners {
+            color: var(--gold);
+        }
+
+        .tab-btn.active-winners::after {
+            width: 60%;
+            background: var(--gradient-gold);
+        }
+
+        /* Main Container */
         .container {
             display: flex;
             flex: 1;
-            overflow: hidden;
+            min-height: calc(100vh - 180px);
         }
 
         .pane {
             flex: 1;
-            display: flex;
+            display: none;
             flex-direction: column;
             align-items: center;
-            padding: 10px;
+            padding: 30px;
             overflow-y: auto;
         }
 
+        .pane.mobile-active {
+            display: flex;
+        }
+
         .pane-male {
-            background: #f0f7ff;
+            background: linear-gradient(180deg, rgba(0,102,204,0.05) 0%, var(--dark) 100%);
         }
 
         .pane-female {
-            background: #fff5f8;
+            background: linear-gradient(180deg, rgba(204,0,102,0.05) 0%, var(--dark) 100%);
         }
 
-        svg {
-            width: 100%;
+        .pane-winners {
+            background: linear-gradient(180deg, rgba(212,175,55,0.05) 0%, var(--dark) 100%);
+        }
+
+        /* Map Grid */
+        .map-grid {
+            display: grid;
+            grid-template-columns: repeat(9, 1fr);
+            gap: 8px;
             max-width: 900px;
-            height: auto;
+            width: 100%;
+            padding: 20px;
         }
 
-        .city-rect {
-            stroke: #ccc;
-            stroke-width: 0.5;
+        .city-cell {
+            aspect-ratio: 1.2;
+            border-radius: 12px;
             cursor: pointer;
-            transition: 0.2s;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            background: var(--surface);
+            border: 1px solid rgba(255,255,255,0.05);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
 
-        .city-rect:hover {
-            stroke: #333;
-            stroke-width: 1.5;
+        .city-cell:hover {
+            transform: scale(1.05);
+            z-index: 10;
         }
 
-     .city-label {
-    font-size: 12px !important;
-    font-weight: 700;
-    fill: #000;
-    paint-order: stroke;
-    stroke: #fff;
-    stroke-width: 3px;
-}
+        .city-cell.has-winner {
+            border: 2px solid var(--gold);
+            box-shadow: 0 0 20px rgba(212, 175, 55, 0.2);
+        }
 
+        .city-cell.has-winner .city-avatar {
+            width: 60%;
+            height: 60%;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid var(--gold);
+        }
 
+        .city-cell .city-number {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .city-cell .city-name {
+            font-size: 8px;
+            color: var(--text-muted);
+            opacity: 0.6;
+            text-align: center;
+            padding: 0 4px;
+        }
+
+        .city-cell.has-winner .city-number,
+        .city-cell.has-winner .city-name {
+            color: var(--gold);
+            opacity: 1;
+        }
+
+        .city-cell.no-participant {
+            display: none;
+        }
+
+        /* Male/Female specific styles */
+        .pane-male .city-cell:hover {
+            border-color: var(--primary-blue);
+            box-shadow: var(--shadow-glow-blue);
+        }
+
+        .pane-female .city-cell:hover {
+            border-color: var(--primary-pink);
+            box-shadow: var(--shadow-glow-pink);
+        }
+
+        /* Winners Content */
+        #winnersContent {
+            width: 100%;
+            max-width: 1200px;
+        }
+
+        .winners-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .winners-header h2 {
+            font-family: 'Playfair Display', serif;
+            font-size: 32px;
+            margin-bottom: 10px;
+            background: var(--gradient-gold);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .winners-header p {
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        .vote-status {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 20px;
+        }
+
+        .vote-status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+        }
+
+        .vote-status-item.voted {
+            color: var(--success);
+        }
+
+        .vote-status-item.available {
+            color: var(--text-muted);
+        }
+
+        .winners-section {
+            margin-bottom: 50px;
+        }
+
+        .winners-section h3 {
+            font-size: 18px;
+            margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .winners-section.male h3 {
+            color: var(--primary-blue);
+        }
+
+        .winners-section.female h3 {
+            color: var(--primary-pink);
+        }
+
+        .winners-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 20px;
+        }
+
+        .winner-card-mini {
+            background: var(--surface);
+            border-radius: 16px;
+            padding: 20px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.05);
+            transition: all 0.3s ease;
+        }
+
+        .winner-card-mini:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .winner-card-mini img {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid var(--gold);
+            margin-bottom: 12px;
+        }
+
+        .winner-card-mini h4 {
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+
+        .winner-card-mini .city-badge {
+            font-size: 11px;
+            color: var(--gold);
+            margin-bottom: 8px;
+        }
+
+        .winner-card-mini .instagram-link {
+            font-size: 11px;
+            color: #E4405F;
+            text-decoration: none;
+            display: block;
+            margin-bottom: 12px;
+        }
+
+        .winner-card-mini .btn-vote {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: var(--gradient-gold);
+            color: var(--dark);
+        }
+
+        .winner-card-mini .btn-vote:hover {
+            transform: scale(1.02);
+        }
+
+        /* Info Bar */
+        .info-bar {
+            background: var(--surface);
+            border-left: 4px solid var(--primary-blue);
+            padding: 20px 25px;
+            margin: 20px 30px;
+            border-radius: 0 12px 12px 0;
+        }
+
+        .info-bar p {
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.8;
+        }
+
+        .info-bar strong {
+            color: var(--text);
+        }
+
+        /* Footer */
+        footer {
+            background: var(--darker);
+            border-top: 1px solid rgba(255,255,255,0.05);
+            padding: 30px;
+            text-align: center;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-bottom: 20px;
+        }
+
+        .footer-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 13px;
+            transition: color 0.3s ease;
+        }
+
+        .footer-links a:hover {
+            color: var(--primary-blue);
+        }
+
+        .footer-copy {
+            font-size: 12px;
+            color: var(--text-muted);
+            opacity: 0.6;
+        }
+
+        /* Modals */
         .modal {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.9);
             display: none;
             justify-content: center;
             align-items: center;
             z-index: 1000;
-            padding: 15px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
         }
 
         .modal-content {
-            background: #fff;
-            padding: 25px;
-            border-radius: 15px;
+            background: var(--surface);
+            padding: 35px;
+            border-radius: 24px;
             width: 100%;
-            max-width: 500px;
+            max-width: 480px;
             max-height: 90vh;
             overflow-y: auto;
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: var(--shadow-lg);
+            animation: modalSlide 0.3s ease;
         }
 
-        input,
-        select {
-            width: 100%;
-            padding: 12px;
-            margin: 10px 0;
-            border: 1px solid #ddd;
-            border-radius: 8px;
+        @keyframes modalSlide {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .modal-header h3 {
+            font-family: 'Playfair Display', serif;
+            font-size: 26px;
+            margin-bottom: 8px;
+        }
+
+        .modal-header p {
+            color: var(--text-muted);
             font-size: 14px;
         }
 
-        .btn-main {
-            background: #ff9800;
-            color: #fff;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 20px;
-            font-weight: bold;
-            cursor: pointer;
-            margin-top: 10px;
+        .form-group {
+            margin-bottom: 20px;
         }
 
-        .btn-main:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-
-        .instagram-info {
-            background: #f0f0f0;
-            padding: 10px;
-            border-radius: 8px;
+        .form-group label {
+            display: block;
             font-size: 12px;
-            color: #666;
-            margin: 5px 0;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-group label .required {
+            color: var(--error);
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 14px 18px;
+            background: var(--surface-light);
+            border: 2px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            color: var(--text);
+            font-size: 15px;
+            transition: all 0.3s ease;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary-blue);
+            box-shadow: 0 0 0 4px rgba(0, 102, 204, 0.1);
+        }
+
+        .form-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .form-hint {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            background: rgba(0, 102, 204, 0.1);
+            border: 1px solid rgba(0, 102, 204, 0.2);
+            border-radius: 10px;
+            padding: 12px;
+            margin-top: 10px;
+            font-size: 12px;
+            color: var(--primary-blue);
+        }
+
+        .form-file {
+            width: 100%;
+            padding: 20px;
+            background: var(--surface-light);
+            border: 2px dashed rgba(255,255,255,0.1);
+            border-radius: 12px;
+            color: var(--text-muted);
+            font-size: 14px;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .privacy-checkbox {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            background: rgba(212, 175, 55, 0.1);
+            border: 1px solid rgba(212, 175, 55, 0.2);
+            border-radius: 12px;
+            padding: 15px;
+            cursor: pointer;
+        }
+
+        .privacy-checkbox input {
+            width: 20px;
+            height: 20px;
+            accent-color: var(--gold);
+            margin-top: 2px;
+        }
+
+        .privacy-checkbox span {
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        .privacy-checkbox a {
+            color: var(--primary-blue);
+            text-decoration: none;
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 16px;
+            background: var(--gradient-gold);
+            color: var(--dark);
+            border: none;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(212, 175, 55, 0.3);
+        }
+
+        .btn-submit:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-cancel {
+            width: 100%;
+            padding: 14px;
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            font-size: 14px;
+            cursor: pointer;
+            margin-top: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .btn-cancel:hover {
+            background: var(--surface-light);
+        }
+
+        /* Vote Modal */
+        #voteModal .modal-content {
+            max-width: 500px;
+        }
+
+        .candidate-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .candidate-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 12px;
+            margin-bottom: 10px;
+            background: var(--surface-light);
+            transition: all 0.3s ease;
+        }
+
+        .candidate-item:hover {
+            border-color: rgba(255,255,255,0.1);
+        }
+
+        .candidate-item.leader {
+            border-color: var(--gold);
+            background: rgba(212, 175, 55, 0.05);
+        }
+
+        .candidate-item .crown {
+            font-size: 24px;
+            margin-right: 10px;
+        }
+
+        .candidate-item img {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin-right: 15px;
+        }
+
+        .candidate-item.leader img {
+            border: 2px solid var(--gold);
+        }
+
+        .candidate-info {
+            flex: 1;
+        }
+
+        .candidate-info h4 {
+            font-size: 15px;
+            margin-bottom: 4px;
+        }
+
+        .candidate-info .instagram-link {
+            font-size: 12px;
+            color: #E4405F;
+            text-decoration: none;
+        }
+
+        .candidate-info .votes {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .btn-vote-small {
+            padding: 10px 20px;
+            background: var(--gradient-blue);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-vote-small:hover {
+            transform: scale(1.05);
+        }
+
+        /* Toast Notifications */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: var(--shadow-lg);
+            z-index: 2000;
+            opacity: 0;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        .toast-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .toast-success .toast-icon {
+            background: var(--success);
+            color: white;
+        }
+
+        .toast-error .toast-icon {
+            background: var(--error);
+            color: white;
+        }
+
+        .toast-warning .toast-icon {
+            background: var(--warning);
+            color: var(--dark);
+        }
+
+        .toast-info .toast-icon {
+            background: var(--primary-blue);
+            color: white;
+        }
+
+        .toast-message {
+            font-size: 14px;
+            color: var(--text);
+        }
+
+        /* Loading Spinner */
+        .loading-spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(0,0,0,0.1);
+            border-top-color: var(--dark);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        .loading-spinner-small {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Admin Page */
+        .admin-header {
+            background: linear-gradient(135deg, #8b0000 0%, #dc3545 100%);
         }
 
         .admin-page {
-            padding: 20px;
+            padding: 30px;
             max-width: 1200px;
             margin: 0 auto;
         }
 
-        .candidate-instagram {
-            color: #E4405F;
-            font-weight: 600;
-            text-decoration: none;
-            font-size: 11px;
+        .admin-section {
+            margin-bottom: 40px;
         }
 
-        .candidate-instagram:hover {
+        .admin-section h2 {
+            font-family: 'Playfair Display', serif;
+            font-size: 24px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .badge-count {
+            background: var(--error);
+            color: white;
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-family: 'DM Sans', sans-serif;
+        }
+
+        /* Pending Cards */
+        .pending-card {
+            background: var(--surface);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border: 1px solid rgba(255,255,255,0.05);
+            transition: all 0.3s ease;
+        }
+
+        .pending-card:hover {
+            border-color: rgba(255,255,255,0.1);
+        }
+
+        .pending-card-header {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+        }
+
+        .pending-avatar {
+            width: 100px;
+            height: 100px;
+            border-radius: 12px;
+            object-fit: cover;
+        }
+
+        .pending-info {
+            flex: 1;
+        }
+
+        .pending-info h3 {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+
+        .pending-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .badge {
+            font-size: 11px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+
+        .badge-city {
+            background: rgba(212, 175, 55, 0.1);
+            color: var(--gold);
+        }
+
+        .badge-male {
+            background: rgba(0, 102, 204, 0.1);
+            color: var(--primary-blue);
+        }
+
+        .badge-female {
+            background: rgba(204, 0, 102, 0.1);
+            color: var(--primary-pink);
+        }
+
+        .instagram-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #E4405F;
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .instagram-link:hover {
             text-decoration: underline;
         }
 
+        .pending-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-approve {
+            flex: 1;
+            padding: 12px;
+            background: var(--success);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-approve:hover {
+            background: #00a040;
+        }
+
+        .btn-reject {
+            flex: 1;
+            padding: 12px;
+            background: var(--error);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-reject:hover {
+            background: #d01030;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+        }
+
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        /* DB Stats */
+        .db-stats {
+            background: var(--surface);
+            border-radius: 16px;
+            padding: 25px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .db-stats h4 {
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+
+        .db-stats p {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: var(--surface-light);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--success);
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        .db-warning .progress-fill {
+            background: var(--error);
+        }
+
+        .db-percentage {
+            font-size: 12px !important;
+            margin-top: 8px;
+        }
+
+        .db-alert {
+            color: var(--error) !important;
+            font-weight: 600;
+            margin-top: 15px;
+        }
+
+        /* Turkey Winners Admin */
+        #turkeyWinnersAdmin {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+        }
+
+        .winner-card {
+            background: var(--surface);
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            border: 2px solid var(--accent-color, var(--gold));
+            position: relative;
+            overflow: hidden;
+        }
+
+        .winner-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 100px;
+            background: linear-gradient(180deg, rgba(212,175,55,0.1) 0%, transparent 100%);
+        }
+
+        .winner-badge {
+            font-size: 40px;
+            margin-bottom: 15px;
+            position: relative;
+        }
+
+        .winner-card h3 {
+            font-size: 14px;
+            color: var(--accent-color, var(--gold));
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .winner-avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 4px solid var(--gold);
+            margin-bottom: 15px;
+            position: relative;
+        }
+
+        .winner-card h2 {
+            font-family: 'Playfair Display', serif;
+            font-size: 22px;
+            margin-bottom: 5px;
+            position: relative;
+        }
+
+        .winner-city {
+            color: var(--text-muted);
+            font-size: 14px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .winner-stats {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .stat {
+            background: var(--surface-light);
+            padding: 12px 20px;
+            border-radius: 12px;
+        }
+
+        .stat-highlight {
+            background: rgba(212, 175, 55, 0.1);
+            border: 1px solid rgba(212, 175, 55, 0.2);
+        }
+
+        .stat-value {
+            display: block;
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--gold);
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .winner-instagram {
+            display: inline-block;
+            background: #E4405F;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 13px;
+            position: relative;
+        }
+
+        .winner-card-empty {
+            border-style: dashed;
+            border-color: rgba(255,255,255,0.1);
+        }
+
+        .winner-card-empty h3 {
+            color: var(--text-muted);
+        }
+
+        .winner-card-empty p {
+            color: var(--text-muted);
+        }
+
+        /* Contact & Privacy Pages */
+        .page-content {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 30px;
+        }
+
+        .content-card {
+            background: var(--surface);
+            border-radius: 20px;
+            padding: 40px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .content-card h2 {
+            font-family: 'Playfair Display', serif;
+            font-size: 28px;
+            margin-bottom: 25px;
+        }
+
+        .content-card p {
+            color: var(--text-muted);
+            line-height: 1.8;
+            margin-bottom: 15px;
+        }
+
+        .content-card h3 {
+            color: var(--primary-blue);
+            font-size: 18px;
+            margin: 30px 0 15px;
+        }
+
+        .content-card ul {
+            color: var(--text-muted);
+            line-height: 2;
+            padding-left: 25px;
+        }
+
+        .contact-info {
+            background: var(--surface-light);
+            border-radius: 12px;
+            padding: 25px;
+            margin: 25px 0;
+        }
+
+        .contact-info p {
+            margin: 10px 0;
+        }
+
+        .alert-box {
+            background: rgba(212, 175, 55, 0.1);
+            border-left: 4px solid var(--gold);
+            border-radius: 0 12px 12px 0;
+            padding: 20px;
+            margin-top: 25px;
+        }
+
+        .alert-box p {
+            color: var(--gold);
+            font-size: 13px;
+            margin: 0;
+        }
+
+        .success-box {
+            background: rgba(0, 200, 83, 0.1);
+            border-left: 4px solid var(--success);
+            border-radius: 0 12px 12px 0;
+            padding: 20px;
+            margin-top: 25px;
+        }
+
+        .success-box p {
+            color: var(--success);
+            font-size: 13px;
+            margin: 0;
+        }
+
+        /* Responsive */
         @media (max-width: 768px) {
-            .pane {
+            header {
+                padding: 15px 20px;
+            }
+
+            .logo {
+                font-size: 22px;
+            }
+
+            .btn-join {
+                padding: 10px 20px;
+                font-size: 12px;
+            }
+
+            .tab-btn {
+                padding: 14px 10px;
+                font-size: 11px;
+                letter-spacing: 0.5px;
+            }
+
+            .map-grid {
+                grid-template-columns: repeat(5, 1fr);
+                gap: 6px;
+                padding: 15px;
+            }
+
+            .city-cell {
+                border-radius: 8px;
+            }
+
+            .city-cell .city-name {
                 display: none;
             }
 
-            .pane.mobile-active {
-                display: flex;
+            .info-bar {
+                margin: 15px;
+                padding: 15px;
+            }
+
+            .modal-content {
+                padding: 25px;
+            }
+
+            .winners-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 12px;
+            }
+
+            .winner-card-mini {
+                padding: 15px;
+            }
+
+            .winner-card-mini img {
+                width: 60px;
+                height: 60px;
+            }
+
+            .pending-card-header {
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+            }
+
+            .pending-info h3 {
+                font-size: 16px;
+            }
+
+            #turkeyWinnersAdmin {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .map-grid {
+                grid-template-columns: repeat(4, 1fr);
+                gap: 4px;
+            }
+
+            .city-cell .city-number {
+                font-size: 9px;
+            }
+
+            .vote-status {
+                flex-direction: column;
+                gap: 10px;
             }
         }
     </style>
@@ -632,267 +1811,209 @@
 
 <body>
 
+    <!-- Main Page -->
     <div id="mainPage">
         <header>
-            <h1>harita.info</h1>
+            <div class="logo">harita<span>.info</span></div>
             <div id="joinArea"></div>
         </header>
 
         <div class="tab-controls">
-            <button class="tab-btn active-male" id="btnM" onclick="switchTab('male')">ERKEKLER</button>
-            <button class="tab-btn" id="btnF" onclick="switchTab('female')">KADINLAR</button>
-            <button class="tab-btn" id="btnW" onclick="switchTab('winners')">TÜRKİYE BİRİNCİLERİ</button>
+            <button class="tab-btn active-male" id="btnM" onclick="switchTab('male')">♂ ERKEKLER</button>
+            <button class="tab-btn" id="btnF" onclick="switchTab('female')">♀ KADINLAR</button>
+            <button class="tab-btn" id="btnW" onclick="switchTab('winners')">🏆 TÜRKİYE BİRİNCİLERİ</button>
         </div>
 
         <div class="container">
             <div class="pane pane-male mobile-active" id="paneMale">
-                <div id="svgMale"></div>
+                <div id="mapMale" class="map-grid"></div>
             </div>
             <div class="pane pane-female" id="paneFemale">
-                <div id="svgFemale"></div>
+                <div id="mapFemale" class="map-grid"></div>
             </div>
-            <div class="pane" id="paneWinners"
-                style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 20px; padding: 20px;">
-                <div id="winnersContent" style="width: 100%; max-width: 1400px;"></div>
+            <div class="pane pane-winners mobile-active" id="paneWinners" style="display:none;">
+                <div id="winnersContent"></div>
             </div>
         </div>
 
-        <!-- Bilgilendirme Notu -->
-        <div
-            style="background: #e8f4fd; border-left: 4px solid #0084ff; padding: 15px; margin: 15px; border-radius: 8px;">
-    <p style="margin: 0; font-size: 13px; color: #333;">
-    ℹ️ <strong>Oylama Kuralları:</strong><br>
-    Yalnızca <strong>1 erkek</strong> ve <strong>1 kadın</strong> aday için oy kullanabilirsiniz. 
-    Lütfen oyunuzu <strong>yaşadığınız şehir</strong> için kullanınız.<br>
-    Türkiye Birinciliği için ayrıca <strong>1 erkek</strong> ve <strong>1 kadın</strong> aday için oy hakkınız bulunmaktadır.<br>
-    Bu oylar <strong>birbirinden bağımsızdır Türkiye kadın/erkek birincileri @enharitalar instagram hesabından paylaşılacaktır</strong>.
-</p>
-
-        </div>
-
-        <!-- Footer -->
-        <footer style="background: #121212; color: #999; padding: 20px; text-align: center; font-size: 12px;">
-            <div style="margin-bottom: 10px;">
-                <a href="/iletisim" onclick="showPage('contact'); return false;"
-                    style="color: #0084ff; text-decoration: none; margin: 0 10px;">📧 İletişim</a>
-                <a href="/gizlilik" onclick="showPage('privacy'); return false;"
-                    style="color: #0084ff; text-decoration: none; margin: 0 10px;">🔒 Gizlilik Politikası</a>
-            </div>
-            <p style="margin: 0;">© 2024 harita.info - Tüm hakları saklıdır.</p>
-            <p style="margin: 5px 0 0 0; font-size: 10px; color: #666;">
-                KVKK kapsamında kişisel verileriniz korunmaktadır.
+        <div class="info-bar">
+            <p>
+                ℹ️ <strong>Oylama Kuralları:</strong> 
+                Yalnızca <strong>1 erkek</strong> ve <strong>1 kadın</strong> aday için oy kullanabilirsiniz. 
+                Lütfen oyunuzu <strong>yaşadığınız şehir</strong> için kullanınız.
+                Türkiye Birinciliği için ayrıca <strong>1 erkek</strong> ve <strong>1 kadın</strong> aday için oy hakkınız bulunmaktadır.
             </p>
+        </div>
+
+        <footer>
+            <div class="footer-links">
+                <a href="/iletisim" onclick="showPage('contact'); return false;">📧 İletişim</a>
+                <a href="/gizlilik" onclick="showPage('privacy'); return false;">🔒 Gizlilik Politikası</a>
+            </div>
+            <p class="footer-copy">© 2024 harita.info - Tüm hakları saklıdır. KVKK kapsamında kişisel verileriniz korunmaktadır.</p>
         </footer>
     </div>
 
-    <!-- İletişim Sayfası -->
+    <!-- Contact Page -->
     <div id="contactPage" style="display:none;">
         <header>
-            <h1>📧 İletişim</h1>
-            <a href="/" onclick="showPage('main'); return false;"
-                style="color:white; text-decoration:none; font-size:14px;">← Ana Sayfa</a>
+            <div class="logo">harita<span>.info</span></div>
+            <a href="/" onclick="showPage('main'); return false;" class="btn-join" style="background: var(--surface);">← Ana Sayfa</a>
         </header>
-        <div style="max-width: 800px; margin: 0 auto; padding: 30px;">
-            <div style="background: white; border-radius: 15px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-                <h2 style="margin-bottom: 20px; color: #333;">Bize Ulaşın</h2>
-                <p style="color: #666; line-height: 1.8;">
-                    Sorularınız, önerileriniz veya şikayetleriniz için bizimle iletişime geçebilirsiniz.
-                </p>
-                <div style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 10px;">
-                    <p style="margin: 10px 0;"><strong>📧 E-posta:</strong> enharitalar@gmail.com</p>
-                    <p style="margin: 10px 0;"><strong>📷 Instagram:</strong> @enharitalar</p>
+        <div class="page-content">
+            <div class="content-card">
+                <h2>📧 Bize Ulaşın</h2>
+                <p>Sorularınız, önerileriniz veya şikayetleriniz için bizimle iletişime geçebilirsiniz.</p>
+                <div class="contact-info">
+                    <p><strong>📧 E-posta:</strong> info@harita.info</p>
+                    <p><strong>📷 Instagram:</strong> @enharitalar</p>
                 </div>
-                <div
-                    style="margin-top: 20px; padding: 15px; background: #fff3cd; border-radius: 10px; border-left: 4px solid #ffc107;">
-                    <p style="margin: 0; font-size: 13px; color: #856404;">
-                        ⚠️ <strong>Önemli:</strong> Yarışma ile ilgili itirazlarınızı en geç yarışma bitiş tarihinden 7
-                        gün sonrasına kadar iletebilirsiniz.
-                    </p>
+                <div class="alert-box">
+                    <p>⚠️ <strong>Önemli:</strong> Yarışma ile ilgili itirazlarınızı en geç yarışma bitiş tarihinden 7 gün sonrasına kadar iletebilirsiniz.</p>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Gizlilik Politikası Sayfası -->
+    <!-- Privacy Page -->
     <div id="privacyPage" style="display:none;">
         <header>
-            <h1>🔒 Gizlilik Politikası</h1>
-            <a href="/" onclick="showPage('main'); return false;"
-                style="color:white; text-decoration:none; font-size:14px;">← Ana Sayfa</a>
+            <div class="logo">harita<span>.info</span></div>
+            <a href="/" onclick="showPage('main'); return false;" class="btn-join" style="background: var(--surface);">← Ana Sayfa</a>
         </header>
-        <div style="max-width: 800px; margin: 0 auto; padding: 30px;">
-            <div style="background: white; border-radius: 15px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-                <h2 style="margin-bottom: 20px; color: #333;">Kişisel Verilerin Korunması (KVKK)</h2>
+        <div class="page-content">
+            <div class="content-card">
+                <h2>🔒 Gizlilik Politikası</h2>
+                <p>KVKK kapsamında kişisel verilerinizin korunması hakkında bilgiler:</p>
 
-                <div style="margin-bottom: 25px;">
-                    <h3 style="color: #0084ff; margin-bottom: 10px;">1. Toplanan Veriler</h3>
-                    <p style="color: #666; line-height: 1.8;">
-                        Yarışmaya katılım sırasında aşağıdaki veriler toplanmaktadır:
-                    </p>
-                    <ul style="color: #666; line-height: 2;">
-                        <li>Ad Soyad</li>
-                        <li>İl Bilgisi (Plaka Kodu)</li>
-                        <li>Cinsiyet</li>
-                        <li>Profil Fotoğrafı</li>
-                        <li>Instagram Kullanıcı Adı (İsteğe Bağlı)</li>
-                    </ul>
-                </div>
+                <h3>1. Toplanan Veriler</h3>
+                <p>Yarışmaya katılım sırasında aşağıdaki veriler toplanmaktadır:</p>
+                <ul>
+                    <li>Ad Soyad</li>
+                    <li>İl Bilgisi (Plaka Kodu)</li>
+                    <li>Cinsiyet</li>
+                    <li>Profil Fotoğrafı</li>
+                    <li>Instagram Kullanıcı Adı (Zorunlu)</li>
+                </ul>
 
-                <div style="margin-bottom: 25px;">
-                    <h3 style="color: #0084ff; margin-bottom: 10px;">2. Verilerin Kullanım Amacı</h3>
-                    <p style="color: #666; line-height: 1.8;">
-                        Toplanan veriler yalnızca yarışma sürecinde kullanılmaktadır:
-                    </p>
-                    <ul style="color: #666; line-height: 2;">
-                        <li>Yarışmacıların platformda görüntülenmesi</li>
-                        <li>Oylama sürecinin yönetimi</li>
-                        <li>Kazananların duyurulması</li>
-                    </ul>
-                </div>
+                <h3>2. Verilerin Kullanım Amacı</h3>
+                <p>Toplanan veriler yalnızca yarışma sürecinde kullanılmaktadır:</p>
+                <ul>
+                    <li>Yarışmacıların platformda görüntülenmesi</li>
+                    <li>Oylama sürecinin yönetimi</li>
+                    <li>Kazananların duyurulması</li>
+                </ul>
 
-                <div style="margin-bottom: 25px;">
-                    <h3 style="color: #0084ff; margin-bottom: 10px;">3. Veri Güvenliği</h3>
-                    <p style="color: #666; line-height: 1.8;">
-                        Verileriniz Firebase altyapısı kullanılarak güvenli bir şekilde saklanmaktadır.
-                        SSL şifreleme ile korunmaktadır.
-                    </p>
-                </div>
+                <h3>3. Veri Güvenliği</h3>
+                <p>Verileriniz Firebase altyapısı kullanılarak güvenli bir şekilde saklanmaktadır. SSL şifreleme ile korunmaktadır.</p>
 
-                <div style="margin-bottom: 25px;">
-                    <h3 style="color: #0084ff; margin-bottom: 10px;">4. Veri Saklama Süresi</h3>
-                    <p style="color: #666; line-height: 1.8;">
-                        Yarışma sona erdikten sonra verileriniz 1 yıl süreyle saklanır ve ardından silinir.
-                        Kazananların verileri izin dahilinde saklanmaya devam edebilir.
-                    </p>
-                </div>
+                <h3>4. Veri Saklama Süresi</h3>
+                <p>Yarışma sona erdikten sonra verileriniz 1 yıl süreyle saklanır ve ardından silinir. Kazananların verileri izin dahilinde saklanmaya devam edebilir.</p>
 
-                <div style="margin-bottom: 25px;">
-                    <h3 style="color: #0084ff; margin-bottom: 10px;">5. Haklarınız</h3>
-                    <p style="color: #666; line-height: 1.8;">
-                        KVKK kapsamında aşağıdaki haklara sahipsiniz:
-                    </p>
-                    <ul style="color: #666; line-height: 2;">
-                        <li>Kişisel verilerinizin işlenip işlenmediğini öğrenme</li>
-                        <li>Kişisel verileriniz işlenmişse bilgi talep etme</li>
-                        <li>Kişisel verilerinizin silinmesini isteme</li>
-                        <li>İşlenen verilerin düzeltilmesini talep etme</li>
-                    </ul>
-                </div>
+                <h3>5. Haklarınız</h3>
+                <p>KVKK kapsamında aşağıdaki haklara sahipsiniz:</p>
+                <ul>
+                    <li>Kişisel verilerinizin işlenip işlenmediğini öğrenme</li>
+                    <li>Kişisel verileriniz işlenmişse bilgi talep etme</li>
+                    <li>Kişisel verilerinizin silinmesini isteme</li>
+                    <li>İşlenen verilerin düzeltilmesini talep etme</li>
+                </ul>
 
-                <div style="padding: 15px; background: #d4edda; border-radius: 10px; border-left: 4px solid #28a745;">
-                    <p style="margin: 0; font-size: 13px; color: #155724;">
-                        ✅ Yarışmaya katılarak bu gizlilik politikasını kabul etmiş sayılırsınız.
-                    </p>
+                <div class="success-box">
+                    <p>✅ Yarışmaya katılarak bu gizlilik politikasını kabul etmiş sayılırsınız.</p>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- Admin Page -->
     <div id="adminPage" style="display:none;">
-        <header style="background:#dc3545;">
-            <h1>🔐 Moderasyon Paneli</h1>
-            <a href="/" onclick="showPage('main'); return false;"
-                style="color:white; text-decoration:none; font-size:14px;">← Ana Sayfa</a>
+        <header class="admin-header">
+            <div class="logo">🔐 Moderasyon</div>
+            <a href="/" onclick="showPage('main'); return false;" class="btn-join" style="background: rgba(255,255,255,0.2);">← Ana Sayfa</a>
         </header>
         <div class="admin-page">
-            <!-- Veritabanı İstatistikleri -->
             <div id="dbStats"></div>
+            
+            <div class="admin-section">
+                <h2>Bekleyen Başvurular <span class="badge-count" id="pendingCount">0</span></h2>
+                <div id="modPanel"></div>
+            </div>
 
-            <h2 style="margin-bottom:20px;">Bekleyen Başvurular (<span id="pendingCount">0</span>)</h2>
-            <div id="modPanel"></div>
-
-            <hr style="margin: 40px 0; border: none; border-top: 2px solid #ddd;">
-
-            <h2 style="margin-bottom:20px;">🏆 Türkiye Birincileri (Gizli)</h2>
-            <div id="turkeyWinnersAdmin" style="display: flex; gap: 30px; flex-wrap: wrap;"></div>
+            <div class="admin-section">
+                <h2>🏆 Türkiye Birincileri</h2>
+                <div id="turkeyWinnersAdmin"></div>
+            </div>
         </div>
     </div>
 
+    <!-- Upload Modal -->
     <div id="uploadModal" class="modal">
-        <div class="modal-content" style="background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);">
-            <h3 style="text-align: center; margin-bottom: 20px; color: #333; font-size: 22px;">🏆 Yarışmaya Katıl</h3>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🏆 Yarışmaya Katıl</h3>
+                <p>Bilgilerinizi eksiksiz doldurun</p>
+            </div>
 
-            <div style="margin-bottom: 15px;">
-                <label
-                    style="display: block; font-size: 13px; color: #666; margin-bottom: 5px; font-weight: 600;">Cinsiyet</label>
-                <select id="upGender"
-                    style="background: #fff; border: 2px solid #e0e0e0; border-radius: 10px; padding: 12px 15px; font-size: 15px; transition: border-color 0.3s;">
+            <div class="form-group">
+                <label>Cinsiyet <span class="required">*</span></label>
+                <select id="upGender" class="form-input">
                     <option value="male">👨 Erkek</option>
                     <option value="female">👩 Kadın</option>
                 </select>
             </div>
 
-            <div style="margin-bottom: 15px;">
-                <label style="display: block; font-size: 13px; color: #666; margin-bottom: 5px; font-weight: 600;">İl
-                    Plaka Kodu</label>
-                <input type="number" id="upCity" placeholder="1-81 arası plaka kodu girin" min="1" max="81"
-                    style="background: #fff; border: 2px solid #e0e0e0; border-radius: 10px; padding: 12px 15px; font-size: 15px;">
+            <div class="form-group">
+                <label>İl Plaka Kodu <span class="required">*</span></label>
+                <input type="number" id="upCity" class="form-input" placeholder="1-81 arası plaka kodu girin" min="1" max="81">
             </div>
 
-            <div style="margin-bottom: 15px;">
-                <label style="display: block; font-size: 13px; color: #666; margin-bottom: 5px; font-weight: 600;">Ad
-                    Soyad *</label>
-                <input type="text" id="upName" placeholder="Adınız ve soyadınız"
-                    style="background: #fff; border: 2px solid #e0e0e0; border-radius: 10px; padding: 12px 15px; font-size: 15px;">
+            <div class="form-group">
+                <label>Ad Soyad <span class="required">*</span></label>
+                <input type="text" id="upName" class="form-input" placeholder="Adınız ve soyadınız">
             </div>
 
-            <div style="margin-bottom: 15px;">
-                <label
-                    style="display: block; font-size: 13px; color: #666; margin-bottom: 5px; font-weight: 600;">Instagram
-                    (İsteğe Bağlı)</label>
-                <input type="text" id="upInstagram" placeholder="@kullanici_adi"
-                    style="background: #fff; border: 2px solid #e0e0e0; border-radius: 10px; padding: 12px 15px; font-size: 15px;">
-                <div
-                    style="background: linear-gradient(135deg, #e8f4fd 0%, #f0f7ff 100%); padding: 10px 12px; border-radius: 8px; font-size: 12px; color: #0084ff; margin-top: 8px; border-left: 3px solid #0084ff;">
-                    💡 Instagram hesabınızı eklerseniz, kazandığınızda profiliniz görüntülenecek.
+            <div class="form-group">
+                <label>Instagram <span class="required">*</span></label>
+                <input type="text" id="upInstagram" class="form-input" placeholder="@kullanici_adi">
+                <div class="form-hint">
+                    <span>💡</span>
+                    <span>Instagram hesabınız profilinizde görüntülenecek ve kazandığınızda duyurulacak.</span>
                 </div>
             </div>
 
-            <div style="margin-bottom: 15px;">
-                <label
-                    style="display: block; font-size: 13px; color: #666; margin-bottom: 5px; font-weight: 600;">Fotoğraf
-                    *</label>
-                <input type="file" id="upFile" accept="image/*"
-                    style="background: #fff; border: 2px dashed #e0e0e0; border-radius: 10px; padding: 15px; font-size: 14px; cursor: pointer;">
-                <div style="font-size: 11px; color: #999; margin-top: 5px;">
-                    ⚠️ Görsel boyutu maksimum 3MB olmalıdır
-                </div>
+            <div class="form-group">
+                <label>Fotoğraf <span class="required">*</span></label>
+                <input type="file" id="upFile" class="form-file" accept="image/*">
+                <p style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">⚠️ Maksimum 3MB</p>
             </div>
 
-            <!-- Gizlilik Politikası Onay Kutusu -->
-            <div
-                style="background: #fff3cd; padding: 12px 15px; border-radius: 10px; margin-bottom: 15px; border: 1px solid #ffc107;">
-                <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer;">
-                    <input type="checkbox" id="privacyAccept"
-                        style="width: 20px; height: 20px; margin-top: 2px; accent-color: #28a745; cursor: pointer;">
-                    <span style="font-size: 13px; color: #856404; line-height: 1.5;">
-                        <a href="javascript:void(0)"
-                            onclick="document.getElementById('uploadModal').style.display='none'; showPage('privacy');"
-                            style="color: #0084ff; text-decoration: underline; font-weight: 600;">Gizlilik
-                            Politikası</a>'nı okudum ve kabul ediyorum. Kişisel verilerimin yarışma süresince
-                        işlenmesine onay veriyorum.
+            <div class="form-group">
+                <label class="privacy-checkbox">
+                    <input type="checkbox" id="privacyAccept">
+                    <span>
+                        <a href="javascript:void(0)" onclick="closeModal('uploadModal'); showPage('privacy');">Gizlilik Politikası</a>'nı okudum ve kabul ediyorum. Kişisel verilerimin yarışma süresince işlenmesine onay veriyorum.
                     </span>
                 </label>
             </div>
 
-            <button class="btn-main" id="submitBtn"
-                style="width:100%; background: linear-gradient(135deg, #28a745 0%, #20c997 100%); padding: 14px; font-size: 16px; border-radius: 12px; box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);"
-                onclick="submitAday()">
+            <button class="btn-submit" id="submitBtn" onclick="submitAday()">
                 📤 Başvuruyu Gönder
             </button>
-            <button onclick="document.getElementById('uploadModal').style.display='none'"
-                style="width:100%; margin-top:12px; background:none; border: 1px solid #ddd; padding: 12px; border-radius: 10px; color:#666; cursor:pointer; font-size: 14px; transition: background 0.3s;">
-                ✖ İptal
+            <button class="btn-cancel" onclick="closeModal('uploadModal')">
+                ✕ İptal
             </button>
         </div>
     </div>
 
+    <!-- Vote Modal -->
     <div id="voteModal" class="modal">
         <div class="modal-content">
-            <h3 id="vTitle">Şehir Adayları</h3>
-            <div id="candidateList" style="margin-top:15px; max-height:400px; overflow-y:auto;"></div>
-            <button onclick="document.getElementById('voteModal').style.display='none'"
-                style="width:100%; margin-top:15px; padding:10px;">Kapat</button>
+            <div class="modal-header">
+                <h3 id="vTitle">Şehir Adayları</h3>
+            </div>
+            <div id="candidateList" class="candidate-list"></div>
+            <button class="btn-cancel" onclick="closeModal('voteModal')">Kapat</button>
         </div>
     </div>
 
@@ -905,17 +2026,21 @@
             document.getElementById('paneMale').classList.toggle('mobile-active', g === 'male');
             document.getElementById('paneFemale').classList.toggle('mobile-active', g === 'female');
             document.getElementById('paneWinners').classList.toggle('mobile-active', g === 'winners');
+            
+            document.getElementById('paneMale').style.display = g === 'male' ? 'flex' : 'none';
+            document.getElementById('paneFemale').style.display = g === 'female' ? 'flex' : 'none';
+            document.getElementById('paneWinners').style.display = g === 'winners' ? 'flex' : 'none';
+            
             document.getElementById('btnM').classList.toggle('active-male', g === 'male');
             document.getElementById('btnF').classList.toggle('active-female', g === 'female');
             document.getElementById('btnW').classList.toggle('active-winners', g === 'winners');
 
-            // Türkiye Birincileri sekmesi açıldığında render et
             if (g === 'winners') {
                 renderWinners();
             }
         }
 
-        // Rastgele sıralama fonksiyonu
+        // Rastgele sıralama
         function shuffleArray(array) {
             const arr = [...array];
             for (let i = arr.length - 1; i > 0; i--) {
@@ -932,11 +2057,11 @@
 
             for (let i = 1; i <= 81; i++) {
                 const maleLeader = (window.adaylar || [])
-                    .filter(a => a.city == i && a.gender == 'male')
-                    .sort((a, b) => b.votes - a.votes)[0];
+                    .filter(a => a.city == i && a.gender === 'male')
+                    .sort((a, b) => (b.votes || 0) - (a.votes || 0))[0];
                 const femaleLeader = (window.adaylar || [])
-                    .filter(a => a.city == i && a.gender == 'female')
-                    .sort((a, b) => b.votes - a.votes)[0];
+                    .filter(a => a.city == i && a.gender === 'female')
+                    .sort((a, b) => (b.votes || 0) - (a.votes || 0))[0];
 
                 if (maleLeader) maleWinners.push({ ...maleLeader, cityName: cityNames[i - 1] });
                 if (femaleLeader) femaleWinners.push({ ...femaleLeader, cityName: cityNames[i - 1] });
@@ -951,137 +2076,141 @@
             if (!container) return;
 
             const { maleWinners, femaleWinners } = getCityWinners();
-
-            // Rastgele sırala (oy sayısı gizli olacağı için)
             const shuffledMale = shuffleArray(maleWinners);
             const shuffledFemale = shuffleArray(femaleWinners);
 
-            // Oy kullanım durumunu kontrol et
             const maleVoted = localStorage.getItem('turkey_vote_male');
             const femaleVoted = localStorage.getItem('turkey_vote_female');
 
             const renderCard = (a) => `
-            <div style="background: rgba(255,255,255,0.1); border-radius: 15px; padding: 15px; text-align: center; width: 140px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2);">
-                <img src="${a.img}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 3px solid #ffd700; margin-bottom: 10px;">
-                <div style="color: white; font-weight: bold; font-size: 13px; margin-bottom: 5px;">${a.name}</div>
-                <div style="color: #ffd700; font-size: 11px; margin-bottom: 5px;">${a.city} - ${a.cityName}</div>
-                ${a.instagram ? `<a href="https://instagram.com/${a.instagram.replace('@', '')}" target="_blank" style="color: #E4405F; font-size: 10px; text-decoration: none;">📷 @${a.instagram.replace('@', '')}</a>` : ''}
-                <button onclick="voteTurkey('${a.id}')" style="margin-top: 10px; background: linear-gradient(135deg, #ffd700 0%, #ff8c00 100%); color: #333; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 11px; font-weight: bold; width: 100%;">
-                    🏆 Türkiye Oyu
-                </button>
-            </div>
-        `;
+                <div class="winner-card-mini">
+                    <img src="${a.img}" alt="${a.name}" loading="lazy">
+                    <h4>${a.name}</h4>
+                    <div class="city-badge">${a.city} - ${a.cityName}</div>
+                    ${a.instagram ? `<a href="https://instagram.com/${a.instagram}" target="_blank" class="instagram-link">📷 @${a.instagram}</a>` : ''}
+                    <button class="btn-vote" onclick="voteTurkey('${a.id}')">🏆 Türkiye Oyu</button>
+                </div>
+            `;
 
             container.innerHTML = `
-            <div style="background: rgba(255,255,255,0.1); border-radius: 10px; padding: 15px; margin-bottom: 20px; text-align: center;">
-                <p style="color: #ffd700; font-size: 14px; margin: 0;">
-                    ℹ️ <strong>Türkiye Birinciliği Oylaması</strong><br>
-                    <span style="font-size: 12px; color: #ccc;">Her kullanıcı 1 erkek ve 1 kadın için oy kullanabilir. Bu oylar şehir oylarından ayrıdır.</span>
-                </p>
-                <div style="margin-top: 10px; font-size: 12px;">
-                    <span style="color: ${maleVoted ? '#28a745' : '#666'};">👨 Erkek: ${maleVoted ? '✅ Oy Kullanıldı' : '⏳ Oy Hakkınız Var'}</span>
-                    <span style="margin-left: 20px; color: ${femaleVoted ? '#28a745' : '#666'};">👩 Kadın: ${femaleVoted ? '✅ Oy Kullanıldı' : '⏳ Oy Hakkınız Var'}</span>
+                <div class="winners-header">
+                    <h2>🏆 Türkiye Birinciliği Oylaması</h2>
+                    <p>Her il birincisi arasından Türkiye birincisini seçin</p>
+                    <div class="vote-status">
+                        <div class="vote-status-item ${maleVoted ? 'voted' : 'available'}">
+                            👨 Erkek: ${maleVoted ? '✓ Oy Verildi' : '○ Oy Hakkınız Var'}
+                        </div>
+                        <div class="vote-status-item ${femaleVoted ? 'voted' : 'available'}">
+                            👩 Kadın: ${femaleVoted ? '✓ Oy Verildi' : '○ Oy Hakkınız Var'}
+                        </div>
+                    </div>
                 </div>
-            </div>
-            
-            <div style="margin-bottom: 30px;">
-                <h2 style="color: #0084ff; text-align: center; margin-bottom: 20px; font-size: 20px;">
-                    👨 Erkek İl Birincileri (${shuffledMale.length} İl)
-                </h2>
-                <div style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: center;">
-                    ${shuffledMale.length > 0 ? shuffledMale.map(a => renderCard(a)).join('') : '<p style="color: #999; text-align: center; width: 100%;">Henüz erkek birincisi yok</p>'}
+
+                <div class="winners-section male">
+                    <h3>👨 Erkek İl Birincileri (${shuffledMale.length} İl)</h3>
+                    <div class="winners-grid">
+                        ${shuffledMale.length > 0 ? shuffledMale.map(a => renderCard(a)).join('') : '<p style="color: var(--text-muted);">Henüz erkek birincisi yok</p>'}
+                    </div>
                 </div>
-            </div>
-            
-            <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.2); margin: 30px 0;">
-            
-            <div>
-                <h2 style="color: #ff007b; text-align: center; margin-bottom: 20px; font-size: 20px;">
-                    👩 Kadın İl Birincileri (${shuffledFemale.length} İl)
-                </h2>
-                <div style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: center;">
-                    ${shuffledFemale.length > 0 ? shuffledFemale.map(a => renderCard(a)).join('') : '<p style="color: #999; text-align: center; width: 100%;">Henüz kadın birincisi yok</p>'}
+
+                <div class="winners-section female">
+                    <h3>👩 Kadın İl Birincileri (${shuffledFemale.length} İl)</h3>
+                    <div class="winners-grid">
+                        ${shuffledFemale.length > 0 ? shuffledFemale.map(a => renderCard(a)).join('') : '<p style="color: var(--text-muted);">Henüz kadın birincisi yok</p>'}
+                    </div>
                 </div>
-            </div>
-        `;
+            `;
         }
 
+        // Haritaları render et - Sadece yarışmacı olan şehirler görünsün, birincinin görseli
         function renderMaps() {
-            const draw = (id, gender) => {
-                let defs = "<defs>";
-                let content = "";
+            const drawMap = (containerId, gender) => {
+                const container = document.getElementById(containerId);
+                if (!container) return;
+
+                const winners = window.cityWinnersCache[gender] || {};
+                let html = '';
+
                 for (let i = 1; i <= 81; i++) {
-                    const leader = (window.adaylar || []).filter(a => a.city == i && a.gender == gender).sort((a, b) => b.votes - a.votes)[0];
-                    let fill = "#fff";
-                    // Lider varsa da görseli gösterme, sadece boş beyaz kutu
-                    const x = ((i - 1) % 9) * 95;
-                    const y = Math.floor((i - 1) / 9) * 65;
-                    content += `<rect x="${x}" y="${y}" width="90" height="60" class="city-rect" style="fill:${fill}" onclick="openCity(${i},'${gender}')"/>
-                <text x="${x + 45}" y="${y + 25}" class="city-label">${i}</text>
-                <text x="${x + 45}" y="${y + 42}" class="city-label" style="font-size:5px; opacity:0.6;">${cityNames[i - 1]}</text>`;
+                    const winner = winners[i];
+                    const hasParticipant = !!winner;
+                    
+                    // Sadece yarışmacı olan şehirleri göster
+                    if (!hasParticipant) continue;
+
+                    html += `
+                        <div class="city-cell has-winner" onclick="openCity(${i},'${gender}')">
+                            <img src="${winner.img}" alt="${winner.name}" class="city-avatar" loading="lazy">
+                            <span class="city-number">${i}</span>
+                            <span class="city-name">${cityNames[i - 1]}</span>
+                        </div>
+                    `;
                 }
-                const svgEl = document.getElementById(id);
-                if (svgEl) svgEl.innerHTML = `<svg viewBox="-5 -5 860 600">${defs}</defs>${content}</svg>`;
+
+                // Eğer hiç yarışmacı yoksa bilgi mesajı göster
+                if (!html) {
+                    html = `
+                        <div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: var(--text-muted);">
+                            <p style="font-size: 48px; margin-bottom: 15px;">🗺️</p>
+                            <p>Henüz bu kategoride yarışmacı yok</p>
+                        </div>
+                    `;
+                }
+
+                container.innerHTML = html;
             };
-            draw('svgMale', 'male');
-            draw('svgFemale', 'female');
+
+            drawMap('mapMale', 'male');
+            drawMap('mapFemale', 'female');
             updateBtn();
         }
 
         function updateBtn() {
             const joinArea = document.getElementById('joinArea');
             if (!joinArea) return;
+            
             if (localStorage.getItem('user_has_joined')) {
-                joinArea.innerHTML = `<button class="btn-main" style="background:#28a745" disabled>✓ Başvurunuz Alındı</button>`;
+                joinArea.innerHTML = `<button class="btn-join btn-joined" disabled>✓ Başvurunuz Alındı</button>`;
             } else {
-                joinArea.innerHTML = `<button class="btn-main" onclick="document.getElementById('uploadModal').style.display='flex'">🏆 Yarışmacı Ol</button>`;
+                joinArea.innerHTML = `<button class="btn-join" onclick="document.getElementById('uploadModal').style.display='flex'">🏆 Yarışmacı Ol</button>`;
             }
         }
 
         function openCity(cityId, gender) {
-            const filtered = (window.adaylar || []).filter(a => a.city == cityId && a.gender == gender).sort((a, b) => b.votes - a.votes);
-            document.getElementById('vTitle').innerText = cityId + " - " + cityNames[cityId - 1] + " Adayları";
+            const filtered = (window.adaylar || [])
+                .filter(a => a.city == cityId && a.gender === gender)
+                .sort((a, b) => (b.votes || 0) - (a.votes || 0));
+
+            document.getElementById('vTitle').innerText = `${cityId} - ${cityNames[cityId - 1]} Adayları`;
             const list = document.getElementById('candidateList');
 
             if (filtered.length === 0) {
-                list.innerHTML = "<p style='text-align:center; padding:20px; color:#999;'>Bu şehirde henüz aday yok.</p>";
+                list.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">🔍</div>
+                        <p>Bu şehirde henüz aday yok</p>
+                    </div>
+                `;
             } else {
                 list.innerHTML = filtered.map((a, idx) => `
-                <div style="display:flex; align-items:center; margin-bottom:12px; padding:12px; border:1px solid ${idx === 0 ? '#ffd700' : '#eee'}; border-radius:10px; background:${idx === 0 ? '#fffbf0' : 'white'};">
-                    ${idx === 0 ? '<span style="font-size:24px; margin-right:8px;">👑</span>' : ''}
-                    <img src="${a.img}" style="width:60px; height:60px; border-radius:50%; object-fit:cover; margin-right:12px; border:2px solid ${idx === 0 ? '#ffd700' : '#ddd'};">
-                    <div style="flex:1;">
-                        <b style="font-size:15px;">${a.name}</b>
-                        ${a.instagram ? `<br><a href="https://instagram.com/${a.instagram.replace('@', '')}" target="_blank" class="candidate-instagram">📷 @${a.instagram.replace('@', '')}</a>` : ''}
-                        <br><small style="color:#666;">${a.votes} Oy</small>
+                    <div class="candidate-item ${idx === 0 ? 'leader' : ''}">
+                        ${idx === 0 ? '<span class="crown">👑</span>' : ''}
+                        <img src="${a.img}" alt="${a.name}" loading="lazy">
+                        <div class="candidate-info">
+                            <h4>${a.name}</h4>
+                            ${a.instagram ? `<a href="https://instagram.com/${a.instagram}" target="_blank" class="instagram-link">📷 @${a.instagram}</a>` : ''}
+                            <p class="votes">${a.votes || 0} Oy</p>
+                        </div>
+                        <button class="btn-vote-small" onclick="vote('${a.id}')">⭐ Oy Ver</button>
                     </div>
-                    <button onclick="vote('${a.id}')" style="background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); color:white; border:none; padding:10px 16px; border-radius:8px; cursor:pointer; font-weight:bold; box-shadow:0 2px 8px rgba(102,126,234,0.3);">
-                        ⭐ Oy Ver
-                    </button>
-                </div>
-            `).join('');
+                `).join('');
             }
 
             document.getElementById('voteModal').style.display = 'flex';
         }
 
-        // İlk render
-        renderMaps();
+        // Başlangıç render
         updateBtn();
-
-function getCityCandidateStatus(cityId) {
-    const list = window.adaylar || [];
-
-    const hasMale = list.some(a => a.city === cityId && a.gender === 'male');
-    const hasFemale = list.some(a => a.city === cityId && a.gender === 'female');
-
-    if (hasMale && hasFemale) return 'both';
-    if (hasMale || hasFemale) return 'single';
-    return 'none';
-}
-
-
-
     </script>
 </body>
 
