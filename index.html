@@ -686,30 +686,33 @@
         }
 
         /* Map Grid */
-        .map-grid {
-            display: grid;
-            grid-template-columns: repeat(9, 1fr);
-            gap: 8px;
-            max-width: 900px;
-            width: 100%;
-            padding: 20px;
-        }
+     .map-grid {
+    display: grid;
+    /* Kartları büyütmek için 9 yerine 7 sütun yapıyoruz */
+    grid-template-columns: repeat(7, 1fr); 
+    gap: 10px;
+    max-width: 1000px; /* Genişliği biraz artırdık */
+    width: 100%;
+    padding: 20px;
+    margin: 0 auto; /* Ortalamak için */
+}
 
-        .city-cell {
-            aspect-ratio: 1.2;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-            background: var(--surface);
-            border: 1px solid rgba(255,255,255,0.05);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-
+.city-cell {
+    /* 1.2 yerine 0.85 yaparak kartları boyuna uzatıyoruz, bilgiler sığsın */
+    aspect-ratio: 0.85; 
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.05);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 5px; /* Kenarlardan biraz boşluk */
+}
         .city-cell:hover {
             transform: scale(1.05);
             z-index: 10;
@@ -1720,94 +1723,139 @@
             margin: 0;
         }
 
+        .city-count {
+    font-size: 9px;
+    color: var(--success); /* Yeşil renk dikkat çeker */
+    margin-top: 2px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+}
+
+/* Mobil uyumluluk için (en alttaki media query içine ekle) */
+@media (max-width: 768px) {
+    .map-grid {
+        /* Tablettte 5 yerine 4 sütun */
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+    }
+    
+    /* İsimlerin görünürlüğünü garantiye alalım */
+    .city-cell .city-name {
+        display: block;
+        font-size: 8px; /* Biraz büyüttük */
+        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+    }
+}
+
+/* Mobil (480px altı - Telefonlar) */
+@media (max-width: 480px) {
+    .map-grid {
+        /* Mobilde 4 yerine 3 sütun yapıyoruz, kartlar genişliyor */
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+    }
+
+    .city-cell .city-number {
+        font-size: 10px;
+    }
+
+    .city-cell .city-name {
+        font-size: 9px; /* Mobilde okunabilirliği artırdık */
+    }
+
+    .city-count {
+        font-size: 8px; /* Katılımcı yazısı */
+    }
+}
+
         /* Responsive */
-        @media (max-width: 768px) {
-            header {
-                padding: 15px 20px;
-            }
+      /* --- RESPONSIVE AYARLAR (MOBİL VE TABLET) --- */
 
-            .logo {
-                font-size: 22px;
-            }
-
-            .btn-join {
-                padding: 10px 20px;
-                font-size: 12px;
-            }
-
-            .tab-btn {
-                padding: 14px 10px;
-                font-size: 11px;
-                letter-spacing: 0.5px;
-            }
-
-            .map-grid {
-                grid-template-columns: repeat(5, 1fr);
-                gap: 6px;
-                padding: 15px;
-            }
-
-            .city-cell {
-                border-radius: 8px;
-            }
-
-            .city-cell .city-name {
-                display: none;
-            }
-
-            .info-bar {
-                margin: 15px;
-                padding: 15px;
-            }
-
-            .modal-content {
-                padding: 25px;
-            }
-
-            .winners-grid {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 12px;
-            }
-
-            .winner-card-mini {
-                padding: 15px;
-            }
-
-            .winner-card-mini img {
-                width: 60px;
-                height: 60px;
-            }
-
-            .pending-card-header {
-                flex-direction: column;
-                align-items: center;
-                text-align: center;
-            }
-
-            .pending-info h3 {
-                font-size: 16px;
-            }
-
-            #turkeyWinnersAdmin {
-                grid-template-columns: 1fr;
-            }
+    /* Tablet (768px ve altı) */
+    @media (max-width: 768px) {
+        header {
+            padding: 15px 20px;
         }
 
-        @media (max-width: 480px) {
-            .map-grid {
-                grid-template-columns: repeat(4, 1fr);
-                gap: 4px;
-            }
-
-            .city-cell .city-number {
-                font-size: 9px;
-            }
-
-            .vote-status {
-                flex-direction: column;
-                gap: 10px;
-            }
+        .logo {
+            font-size: 22px;
         }
+
+        .map-grid {
+            /* Tablette 4 sütun */
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+        }
+
+        /* İsimlerin görünmesini garantiye alıyoruz */
+        .city-cell .city-name {
+            display: block !important;
+            font-size: 8px;
+            margin-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+        }
+
+        .info-bar {
+            margin: 15px;
+            padding: 15px;
+        }
+
+        .winners-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        
+        #turkeyWinnersAdmin {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* Mobil (480px ve altı - Telefonlar) */
+    @media (max-width: 480px) {
+        .map-grid {
+            /* Mobilde 3 sütun yapıyoruz */
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+        }
+
+        .city-cell {
+            /* Kartları boyuna uzatıyoruz ki resim + plaka + isim + sayı sığsın */
+            aspect-ratio: 0.75; 
+            padding: 4px;
+        }
+
+        .city-cell .city-avatar {
+            width: 55%; /* Resmi biraz küçültüp yer açalım */
+            height: 55%;
+        }
+
+        .city-cell .city-number {
+            font-size: 9px;
+            margin-top: 2px;
+        }
+
+        .city-cell .city-name {
+            font-size: 8px; /* İsim boyutu */
+            line-height: 1.2;
+            display: block !important; /* Kesinlikle görünür olsun */
+        }
+
+        .city-count {
+            font-size: 7px; /* Katılımcı sayısı boyutu */
+            margin-top: 1px;
+        }
+
+        .vote-status {
+            flex-direction: column;
+            gap: 10px;
+        }
+    }
     </style>
 </head>
 
@@ -2127,47 +2175,53 @@
         }
 
         // Haritaları render et - Sadece yarışmacı olan şehirler görünsün, birincinin görseli
-        function renderMaps() {
-            const drawMap = (containerId, gender) => {
-                const container = document.getElementById(containerId);
-                if (!container) return;
+  // Haritaları render et
+function renderMaps() {
+    const drawMap = (containerId, gender) => {
+        const container = document.getElementById(containerId);
+        if (!container) return;
 
-                const winners = window.cityWinnersCache[gender] || {};
-                let html = '';
+        const winners = window.cityWinnersCache[gender] || {};
+        let html = '';
 
-                for (let i = 1; i <= 81; i++) {
-                    const winner = winners[i];
-                    const hasParticipant = !!winner;
-                    
-                    // Sadece yarışmacı olan şehirleri göster
-                    if (!hasParticipant) continue;
+        for (let i = 1; i <= 81; i++) {
+            const winner = winners[i];
+            const hasParticipant = !!winner;
+            
+            // Sadece yarışmacı olan şehirleri göster
+            if (!hasParticipant) continue;
 
-                    html += `
-                        <div class="city-cell has-winner" onclick="openCity(${i},'${gender}')">
-                            <img src="${winner.img}" alt="${winner.name}" class="city-avatar" loading="lazy">
-                            <span class="city-number">${i}</span>
-                            <span class="city-name">${cityNames[i - 1]}</span>
-                        </div>
-                    `;
-                }
+            // --- YENİ EKLENEN KISIM BAŞLANGIÇ ---
+            // O şehirdeki ve o cinsiyetteki toplam aday sayısını hesapla
+            const count = (window.adaylar || []).filter(a => a.city == i && a.gender === gender).length;
+            // --- YENİ EKLENEN KISIM BİTİŞ ---
 
-                // Eğer hiç yarışmacı yoksa bilgi mesajı göster
-                if (!html) {
-                    html = `
-                        <div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: var(--text-muted);">
-                            <p style="font-size: 48px; margin-bottom: 15px;">🗺️</p>
-                            <p>Henüz bu kategoride yarışmacı yok</p>
-                        </div>
-                    `;
-                }
-
-                container.innerHTML = html;
-            };
-
-            drawMap('mapMale', 'male');
-            drawMap('mapFemale', 'female');
-            updateBtn();
+            html += `
+                <div class="city-cell has-winner" onclick="openCity(${i},'${gender}')">
+                    <img src="${winner.img}" alt="${winner.name}" class="city-avatar" loading="lazy">
+                    <span class="city-number">${i}</span>
+                    <span class="city-name">${cityNames[i - 1]}</span>
+                    <span class="city-count">Katılımcı: ${count}</span>
+                </div>
+            `;
         }
+
+        if (!html) {
+            html = `
+                <div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: var(--text-muted);">
+                    <p style="font-size: 48px; margin-bottom: 15px;">🗺️</p>
+                    <p>Henüz bu kategoride yarışmacı yok</p>
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+    };
+
+    drawMap('mapMale', 'male');
+    drawMap('mapFemale', 'female');
+    updateBtn();
+}
 
         function updateBtn() {
             const joinArea = document.getElementById('joinArea');
