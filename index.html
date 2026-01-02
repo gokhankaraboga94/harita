@@ -132,41 +132,63 @@
 
                 const base64 = await fileToBase64(file);
                 
-                // IP adresini sadece form gönderiminde al
+                // IP adresini al - birden fazla servis dene
                 let clientIP = 'IP Alınamadı';
+                console.log('IP adresi alınıyor...');
+                
+                // İlk önce ipify dene
                 try {
                     const ipResponse = await fetch('https://api.ipify.org?format=json');
                     const ipData = await ipResponse.json();
                     clientIP = ipData.ip;
+                    console.log('IP alındı (ipify):', clientIP);
                 } catch (error) {
-                    console.error('IP alınamadı:', error);
+                    console.error('ipify başarısız, alternatif deneniyor:', error);
+                    
+                    // Alternatif servis dene
+                    try {
+                        const altResponse = await fetch('https://api.ipapi.is');
+                        const altData = await altResponse.json();
+                        clientIP = altData.ip || 'IP Alınamadı';
+                        console.log('IP alındı (ipapi):', clientIP);
+                    } catch (altError) {
+                        console.error('Alternatif IP servisi de başarısız:', altError);
+                    }
                 }
 
-                const newAdayRef = push(ref(db, 'bekleyen_adaylar'));
-                await update(newAdayRef, {
-                    gender,
-                    city,
-                    name,
+                // Veritabanına kaydet
+                const dataToSave = {
+                    gender: gender,
+                    city: city,
+                    name: name,
                     instagram: igUsername,
                     img: base64,
                     votes: 0,
                     turkeyVotes: 0,
                     status: 'pending',
                     createdAt: Date.now(),
-                    // KVKK Onay Bilgileri
-                    kvkkConsent: {
-                        accepted: true,
-                        acceptedAt: new Date().toISOString(),
-                        ipAddress: clientIP,
-                        userAgent: navigator.userAgent
-                    }
+                    // KVKK Onay Bilgileri - flat structure
+                    kvkkAccepted: true,
+                    kvkkAcceptedAt: new Date().toISOString(),
+                    kvkkIpAddress: clientIP,
+                    kvkkUserAgent: navigator.userAgent || 'Bilinmiyor'
+                };
+                
+                console.log('Kaydedilecek veri:', {
+                    ...dataToSave,
+                    img: '[BASE64_IMAGE]' // Konsola görsel basmasın
                 });
+
+                const newAdayRef = push(ref(db, 'bekleyen_adaylar'));
+                await update(newAdayRef, dataToSave);
 
                 localStorage.setItem('user_has_joined', 'true');
                 showToast("Başvurunuz alındı! Moderatör onayından sonra yayınlanacak.", "success");
+                console.log('Başvuru başarıyla kaydedildi. IP:', clientIP);
                 closeModal('uploadModal');
                 updateBtn();
             } catch (e) {
+                console.error('Başvuru hatası:', e);
                 showToast("Hata: " + e.message, "error");
                 const submitBtn = document.getElementById('submitBtn');
                 submitBtn.disabled = false;
