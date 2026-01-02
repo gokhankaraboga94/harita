@@ -562,7 +562,7 @@
         /* Join Button */
         .btn-join {
             background: var(--gradient-gold);
-            color: var(--dark);
+            color: #ffffff; /* Siyah yerine beyaz yaptık */
             border: none;
             padding: 12px 28px;
             border-radius: 50px;
@@ -1838,11 +1838,13 @@
 
         <div class="info-bar">
             <p>
-                ℹ️ <strong>Oylama Kuralları:</strong> 
-                Yalnızca <strong>1 erkek</strong> ve <strong>1 kadın</strong> aday için oy kullanabilirsiniz. 
-                Lütfen oyunuzu <strong>yaşadığınız şehir</strong> için kullanınız.
-                Türkiye Birinciliği için ayrıca <strong>1 erkek</strong> ve <strong>1 kadın</strong> aday için oy hakkınız bulunmaktadır.
-            </p>
+    ℹ️ <strong>Oylama Kuralları:</strong> 
+    Yalnızca <strong>1 erkek</strong> ve <strong>1 kadın</strong> aday için oy kullanabilirsiniz. 
+    Lütfen oyunuzu <strong>yaşadığınız şehir</strong> için kullanınız.
+    Türkiye Birinciliği için ayrıca <strong>1 erkek</strong> ve <strong>1 kadın</strong> aday için oy hakkınız bulunmaktadır.
+    <br><br>
+    📣 <strong>Türkiye birincileri <a href="https://instagram.com/enharitalar" target="_blank" style="color: var(--gradient-gold); text-decoration: none;">@enharitalar</a> Instagram hesabından paylaşılacaktır.</strong>
+</p>
         </div>
 
         <footer>
@@ -1930,7 +1932,7 @@
     <div id="adminPage" style="display:none;">
         <header class="admin-header">
             <div class="logo">🔐 Moderasyon</div>
-            <a href="/" onclick="showPage('main'); return false;" class="btn-join" style="background: rgba(255,255,255,0.2);">← Ana Sayfa</a>
+            <a href="/" onclick="showPage('main'); return false;" class="btn-join" style="background: rgba(238, 11, 11, 0.2);">← Ana Sayfa</a>
         </header>
         <div class="admin-page">
             <div id="dbStats"></div>
