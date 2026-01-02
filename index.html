@@ -736,12 +736,14 @@
         }
 
         .city-cell .city-name {
-            font-size: 8px;
-            color: var(--text-muted);
-            opacity: 0.6;
-            text-align: center;
-            padding: 0 4px;
-        }
+                display: block; /* Görünür yaptık */
+                font-size: 6px; /* Mobilde kutular küçük olduğu için fontu küçülttük */
+                line-height: 1.1;
+                margin-top: 2px;
+                white-space: nowrap; /* İsmin alt satıra kayıp taşmasını engeller */
+                overflow: hidden;
+                text-overflow: ellipsis; /* Sığmayan uzun isimleri ... ile bitirir */
+            }
 
         .city-cell.has-winner .city-number,
         .city-cell.has-winner .city-name {
