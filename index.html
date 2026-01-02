@@ -317,17 +317,23 @@
                 await remove(ref(db, `bekleyen_adaylar/${id}`));
 
                 // Sonra adaylara ekle
-                const newAdayRef = push(ref(db, 'adaylar'));
-                await update(newAdayRef, {
-                    gender: aday.gender,
-                    city: aday.city,
-                    name: aday.name,
-                    instagram: aday.instagram,
-                    img: aday.img,
-                    votes: 0,
-                    turkeyVotes: 0,
-                    createdAt: aday.createdAt || Date.now()
-                });
+               const newAdayRef = push(ref(db, 'adaylar'));
+await update(newAdayRef, {
+    gender: aday.gender,
+    city: aday.city,
+    name: aday.name,
+    instagram: aday.instagram,
+    img: aday.img,
+    votes: 0,
+    turkeyVotes: 0,
+    createdAt: aday.createdAt || Date.now(),
+    
+    // Eksik alanları buraya ekleyin:
+    ipAddress: aday.ipAddress || null,
+    userAgent: aday.userAgent || null,
+    kvkkAccepted: aday.kvkkAccepted || false,
+    kvkkAcceptedAt: aday.kvkkAcceptedAt || null
+});
 
                 showToast("Başvuru onaylandı!", "success");
             } catch (e) {
