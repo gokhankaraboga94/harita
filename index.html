@@ -131,6 +131,16 @@
                 submitBtn.innerHTML = '<span class="loading-spinner"></span> Yükleniyor...';
 
                 const base64 = await fileToBase64(file);
+                
+                // IP adresini sadece form gönderiminde al
+                let clientIP = 'IP Alınamadı';
+                try {
+                    const ipResponse = await fetch('https://api.ipify.org?format=json');
+                    const ipData = await ipResponse.json();
+                    clientIP = ipData.ip;
+                } catch (error) {
+                    console.error('IP alınamadı:', error);
+                }
 
                 const newAdayRef = push(ref(db, 'bekleyen_adaylar'));
                 await update(newAdayRef, {
@@ -142,7 +152,14 @@
                     votes: 0,
                     turkeyVotes: 0,
                     status: 'pending',
-                    createdAt: Date.now()
+                    createdAt: Date.now(),
+                    // KVKK Onay Bilgileri
+                    kvkkConsent: {
+                        accepted: true,
+                        acceptedAt: new Date().toISOString(),
+                        ipAddress: clientIP,
+                        userAgent: navigator.userAgent
+                    }
                 });
 
                 localStorage.setItem('user_has_joined', 'true');
@@ -1917,7 +1934,7 @@
                 <h2>📧 Bize Ulaşın</h2>
                 <p>Sorularınız, önerileriniz veya şikayetleriniz için bizimle iletişime geçebilirsiniz.</p>
                 <div class="contact-info">
-                    <p><strong>📧 E-posta:</strong> enharitalar@gmail.com</p>
+                    <p><strong>📧 E-posta:</strong> <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="d1b4bfb9b0a3b8a5b0bdb0a391b6bcb0b8bdffb2bebc">[email&#160;protected]</a></p>
                     <p><strong>📷 Instagram:</strong> @enharitalar</p>
                 </div>
                 <div class="alert-box">
@@ -1935,39 +1952,129 @@
         </header>
         <div class="page-content">
             <div class="content-card">
-                <h2>🔒 Gizlilik Politikası</h2>
-                <p>KVKK kapsamında kişisel verilerinizin korunması hakkında bilgiler:</p>
-
-                <h3>1. Toplanan Veriler</h3>
-                <p>Yarışmaya katılım sırasında aşağıdaki veriler toplanmaktadır:</p>
+                <h2>🔒 Gizlilik Politikası ve KVKK Aydınlatma Metni</h2>
+                
+                <h3>1. Veri Sorumlusu</h3>
+                <p>6698 sayılı Kişisel Verilerin Korunması Kanunu ("KVKK") uyarınca, harita.info olarak veri sorumlusu sıfatıyla kişisel verilerinizi aşağıda açıklanan amaçlar ve hukuki sebepler çerçevesinde işlemekteyiz.</p>
+                
+                <h3>2. İşlenen Kişisel Veriler</h3>
+                <p>Yarışmaya katılım sırasında aşağıdaki kişisel verileriniz toplanmaktadır:</p>
                 <ul>
-                    <li>Ad Soyad</li>
-                    <li>İl Bilgisi (Plaka Kodu)</li>
-                    <li>Cinsiyet</li>
-                    <li>Profil Fotoğrafı</li>
-                    <li>Instagram Kullanıcı Adı (Zorunlu)</li>
+                    <li><strong>Kimlik Verileri:</strong> Ad Soyad</li>
+                    <li><strong>İletişim Verileri:</strong> Instagram Kullanıcı Adı</li>
+                    <li><strong>Lokasyon Verileri:</strong> İl Bilgisi (Plaka Kodu)</li>
+                    <li><strong>Görsel ve İşitsel Veriler:</strong> Profil Fotoğrafı</li>
+                    <li><strong>Demografik Veriler:</strong> Cinsiyet</li>
+                    <li><strong>İşlem Güvenliği Verileri:</strong> IP Adresi, Onay Tarihi ve Saati, Tarayıcı Bilgisi (User Agent)</li>
                 </ul>
 
-                <h3>2. Verilerin Kullanım Amacı</h3>
-                <p>Toplanan veriler yalnızca yarışma sürecinde kullanılmaktadır:</p>
+                <h3>3. Kişisel Verilerin İşlenme Amaçları</h3>
+                <p>Toplanan kişisel verileriniz aşağıdaki amaçlarla işlenmektedir:</p>
                 <ul>
+                    <li>Yarışma katılımının sağlanması ve yarışmanın yürütülmesi</li>
                     <li>Yarışmacıların platformda görüntülenmesi</li>
-                    <li>Oylama sürecinin yönetimi</li>
-                    <li>Kazananların duyurulması</li>
+                    <li>Oylama süreçlerinin yönetimi ve takibi</li>
+                    <li>Kazananların belirlenmesi ve duyurulması</li>
+                    <li>Yasal yükümlülüklerin yerine getirilmesi</li>
+                    <li>Uyuşmazlık durumunda delil teşkil etmesi</li>
+                    <li>Çift oy kullanımının engellenmesi</li>
                 </ul>
 
-                <h3>3. Veri Güvenliği</h3>
-                <p>Verileriniz Firebase altyapısı kullanılarak güvenli bir şekilde saklanmaktadır. SSL şifreleme ile korunmaktadır.</p>
+                <h3>4. Kişisel Verilerin İşlenme Hukuki Sebepleri</h3>
+                <p>Kişisel verileriniz KVKK'nın 5. maddesinde belirtilen aşağıdaki hukuki sebeplere dayanarak işlenmektedir:</p>
+                <ul>
+                    <li><strong>Açık Rızanız:</strong> Başvuru formunda onay kutusunu işaretleyerek verdiğiniz açık rıza</li>
+                    <li><strong>Sözleşmenin İfası:</strong> Yarışma katılım koşullarının yerine getirilmesi</li>
+                    <li><strong>Hukuki Yükümlülük:</strong> Yasal düzenlemelere uyum sağlanması</li>
+                    <li><strong>Meşru Menfaat:</strong> Yarışmanın düzgün işleyişinin sağlanması</li>
+                </ul>
 
-                <h3>4. Veri Saklama Süresi</h3>
-                <p>Yarışma sona erdikten sonra verileriniz 1 yıl süreyle saklanır ve ardından silinir. Kazananların verileri izin dahilinde saklanmaya devam edebilir.</p>
+                <h3>5. Kişisel Verilerin Aktarımı</h3>
+                <p>Kişisel verileriniz aşağıdaki durumlarda paylaşılmaktadır:</p>
+                <ul>
+                    <li><strong>Platform Kullanıcıları:</strong> Ad, fotoğraf, şehir ve Instagram bilgileriniz yarışmanın doğası gereği diğer kullanıcılarla paylaşılmaktadır</li>
+                    <li><strong>Teknik Altyapı:</strong> Firebase (Google) altyapısı kullanılarak veriler güvenli sunucularda saklanmaktadır</li>
+                    <li><strong>Yasal Merciler:</strong> Yasal zorunluluklar dahilinde yetkili kamu kurum ve kuruluşları ile paylaşılabilir</li>
+                </ul>
 
-                <h3>5. Haklarınız</h3>
-                <p>KVKK kapsamında aşağıdaki haklara sahipsiniz:</p>
+                <h3>6. Kişisel Verilerin Saklanma Süresi</h3>
+                <p>Kişisel verileriniz:</p>
+                <ul>
+                    <li>Yarışma süresince aktif olarak işlenir</li>
+                    <li>Yarışma bitiminden itibaren 1 yıl süreyle yasal yükümlülükler için saklanır</li>
+                    <li>Kazananların verileri, açık rızaları dahilinde daha uzun süre saklanabilir</li>
+                    <li>Saklama süresi sonunda veriler güvenli bir şekilde silinir, yok edilir veya anonim hale getirilir</li>
+                </ul>
+
+                <h3>7. Kişisel Verilerin Güvenliği</h3>
+                <p>Verilerinizin güvenliği için alınan tedbirler:</p>
+                <ul>
+                    <li>SSL sertifikası ile şifreli bağlantı</li>
+                    <li>Firebase güvenlik kuralları ile korunan veritabanı</li>
+                    <li>Moderasyon sistemi ile içerik kontrolü</li>
+                    <li>IP bazlı oy kullanma sınırlaması</li>
+                    <li>Yetkisiz erişimlere karşı güvenlik duvarı</li>
+                </ul>
+
+                <h3>8. KVKK Kapsamındaki Haklarınız</h3>
+                <p>KVKK'nın 11. maddesi uyarınca sahip olduğunuz haklar:</p>
                 <ul>
                     <li>Kişisel verilerinizin işlenip işlenmediğini öğrenme</li>
-                    <li>Kişisel verileriniz işlenmişse bilgi talep etme</li>
-                    <li>Kişisel verilerinizin silinmesini isteme</li>
+                    <li>İşlenmişse buna ilişkin bilgi talep etme</li>
+                    <li>İşlenme amacını ve bunların amacına uygun kullanılıp kullanılmadığını öğrenme</li>
+                    <li>Yurt içinde veya yurt dışında aktarıldığı üçüncü kişileri bilme</li>
+                    <li>Eksik veya yanlış işlenmişse düzeltilmesini isteme</li>
+                    <li>KVKK'nın 7. maddesinde öngörülen şartlar çerçevesinde silinmesini veya yok edilmesini isteme</li>
+                    <li>Düzeltme veya silme işlemlerinin aktarıldığı üçüncü kişilere bildirilmesini isteme</li>
+                    <li>Münhasıran otomatik sistemler vasıtasıyla analiz edilmesi suretiyle aleyhinize bir sonucun ortaya çıkmasına itiraz etme</li>
+                    <li>Kanuna aykırı olarak işlenmesi sebebiyle zarara uğramanız halinde zararın giderilmesini talep etme</li>
+                </ul>
+
+                <h3>9. Çerez (Cookie) Politikası</h3>
+                <p>Sitemizde kullanılan çerezler:</p>
+                <ul>
+                    <li><strong>Oturum Çerezleri:</strong> Oy kullanma işlemlerini takip etmek için</li>
+                    <li><strong>Tercih Çerezleri:</strong> Kullanıcı tercihlerini hatırlamak için</li>
+                    <li><strong>Analitik Çerezler:</strong> Site kullanımını analiz etmek için</li>
+                </ul>
+                <p>Çerezleri tarayıcı ayarlarınızdan devre dışı bırakabilirsiniz, ancak bu durumda bazı özellikler çalışmayabilir.</p>
+
+                <h3>10. Veri İhlali Durumunda</h3>
+                <p>Olası bir veri ihlali durumunda:</p>
+                <ul>
+                    <li>72 saat içinde Kişisel Verileri Koruma Kurumu'na bildirim yapılır</li>
+                    <li>Etkilenen kullanıcılar en kısa sürede bilgilendirilir</li>
+                    <li>İhlali önlemek için gerekli tedbirler alınır</li>
+                </ul>
+
+                <h3>11. İletişim</h3>
+                <p>KVKK kapsamındaki haklarınızı kullanmak veya sorularınız için:</p>
+                <p><strong>E-posta:</strong> kvkk@harita.info</p>
+                <p><strong>Adres:</strong> [Şirket Adresi Buraya Eklenecek]</p>
+                <p><strong>KEP Adresi:</strong> [KEP Adresi Buraya Eklenecek]</p>
+                
+                <div style="background: var(--primary-light); padding: 15px; border-radius: 8px; margin-top: 20px;">
+                    <p><strong>📌 Not:</strong> Başvuru formunda "Gizlilik Politikası'nı okudum ve kabul ediyorum" kutusunu işaretleyerek, yukarıda belirtilen tüm şartları kabul etmiş sayılırsınız. Bu onay, IP adresiniz ve zaman bilgisi ile birlikte kaydedilmektedir.</p>
+                </div>
+                
+                <!-- Başvuru Formuna Geri Dön Butonu -->
+                <div style="text-align: center; margin-top: 30px;">
+                    <button onclick="showPage('main'); document.getElementById('uploadModal').style.display='flex';" 
+                            style="background: linear-gradient(135deg, var(--primary), var(--primary-dark)); 
+                                   color: white; 
+                                   padding: 12px 30px; 
+                                   border: none; 
+                                   border-radius: 8px; 
+                                   font-size: 16px; 
+                                   font-weight: 600; 
+                                   cursor: pointer;
+                                   display: inline-flex;
+                                   align-items: center;
+                                   gap: 8px;
+                                   transition: all 0.3s ease;">
+                        ← Başvuru Formuna Geri Dön
+                    </button>
+                </div>
                     <li>İşlenen verilerin düzeltilmesini talep etme</li>
                 </ul>
 
@@ -2174,54 +2281,62 @@
             `;
         }
 
-        // Haritaları render et - Sadece yarışmacı olan şehirler görünsün, birincinin görseli
-  // Haritaları render et
-function renderMaps() {
-    const drawMap = (containerId, gender) => {
-        const container = document.getElementById(containerId);
-        if (!container) return;
+        // Haritaları render et - Performans optimizasyonu ile
+        function renderMaps() {
+            // RequestAnimationFrame kullanarak render işlemini optimize et
+            requestAnimationFrame(() => {
+                const drawMap = (containerId, gender) => {
+                    const container = document.getElementById(containerId);
+                    if (!container) return;
 
-        const winners = window.cityWinnersCache[gender] || {};
-        let html = '';
+                    const winners = window.cityWinnersCache[gender] || {};
+                    const fragments = document.createDocumentFragment();
+                    let hasAnyWinner = false;
 
-        for (let i = 1; i <= 81; i++) {
-            const winner = winners[i];
-            const hasParticipant = !!winner;
-            
-            // Sadece yarışmacı olan şehirleri göster
-            if (!hasParticipant) continue;
+                    // HTML string yerine DOM elemanları oluştur (daha hızlı)
+                    for (let i = 1; i <= 81; i++) {
+                        const winner = winners[i];
+                        if (!winner) continue;
+                        
+                        hasAnyWinner = true;
+                        const count = (window.adaylar || []).filter(a => a.city == i && a.gender === gender).length;
+                        
+                        const cell = document.createElement('div');
+                        cell.className = 'city-cell has-winner';
+                        cell.onclick = () => openCity(i, gender);
+                        
+                        // Lazy loading için IntersectionObserver kullanılabilir
+                        cell.innerHTML = `
+                            <img src="${winner.img}" alt="${winner.name}" class="city-avatar" loading="lazy">
+                            <span class="city-number">${i}</span>
+                            <span class="city-name">${cityNames[i - 1]}</span>
+                            <span class="city-count">Katılımcı: ${count}</span>
+                        `;
+                        
+                        fragments.appendChild(cell);
+                    }
 
-            // --- YENİ EKLENEN KISIM BAŞLANGIÇ ---
-            // O şehirdeki ve o cinsiyetteki toplam aday sayısını hesapla
-            const count = (window.adaylar || []).filter(a => a.city == i && a.gender === gender).length;
-            // --- YENİ EKLENEN KISIM BİTİŞ ---
+                    // İçeriği temizle ve yeni içeriği ekle
+                    container.innerHTML = '';
+                    
+                    if (hasAnyWinner) {
+                        container.appendChild(fragments);
+                    } else {
+                        container.innerHTML = `
+                            <div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: var(--text-muted);">
+                                <p style="font-size: 48px; margin-bottom: 15px;">🗺️</p>
+                                <p>Henüz bu kategoride yarışmacı yok</p>
+                            </div>
+                        `;
+                    }
+                };
 
-            html += `
-                <div class="city-cell has-winner" onclick="openCity(${i},'${gender}')">
-                    <img src="${winner.img}" alt="${winner.name}" class="city-avatar" loading="lazy">
-                    <span class="city-number">${i}</span>
-                    <span class="city-name">${cityNames[i - 1]}</span>
-                    <span class="city-count">Katılımcı: ${count}</span>
-                </div>
-            `;
+                // Her iki haritayı da çiz
+                drawMap('mapMale', 'male');
+                drawMap('mapFemale', 'female');
+                updateBtn();
+            });
         }
-
-        if (!html) {
-            html = `
-                <div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: var(--text-muted);">
-                    <p style="font-size: 48px; margin-bottom: 15px;">🗺️</p>
-                    <p>Henüz bu kategoride yarışmacı yok</p>
-                </div>
-            `;
-        }
-
-        container.innerHTML = html;
-    };
-
-    drawMap('mapMale', 'male');
-    drawMap('mapFemale', 'female');
-    updateBtn();
-}
 
         function updateBtn() {
             const joinArea = document.getElementById('joinArea');
@@ -2267,9 +2382,51 @@ function renderMaps() {
             document.getElementById('voteModal').style.display = 'flex';
         }
 
-        // Başlangıç render
-        updateBtn();
+        function closeModal(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+
+        // Sayfa yüklendiğinde - Optimized initialization
+        document.addEventListener('DOMContentLoaded', () => {
+            // İlk olarak UI'ı hazırla
+            updateBtn();
+            switchTab('male');
+            
+            // Loading indicator ekle
+            const containers = ['mapMale', 'mapFemale'];
+            containers.forEach(id => {
+                const container = document.getElementById(id);
+                if (container) {
+                    container.innerHTML = `
+                        <div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px;">
+                            <div class="loading-spinner" style="margin: 0 auto;"></div>
+                            <p style="color: var(--text-muted); margin-top: 15px;">Yükleniyor...</p>
+                        </div>
+                    `;
+                }
+            });
+        });
+        
+        // Firebase bağlantısı kurulduğunda ilk render'ı yap
+        window.addEventListener('load', () => {
+            // Eğer data gelmediyse boş render yap
+            setTimeout(() => {
+                if (!window.adaylar || window.adaylar.length === 0) {
+                    const containers = ['mapMale', 'mapFemale'];
+                    containers.forEach(id => {
+                        const container = document.getElementById(id);
+                        if (container && container.innerHTML.includes('loading-spinner')) {
+                            container.innerHTML = `
+                                <div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: var(--text-muted);">
+                                    <p style="font-size: 48px; margin-bottom: 15px;">🗺️</p>
+                                    <p>Veriler yükleniyor veya henüz yarışmacı yok</p>
+                                </div>
+                            `;
+                        }
+                    });
+                }
+            }, 3000); // 3 saniye bekle
+        });
     </script>
 </body>
-
 </html>
