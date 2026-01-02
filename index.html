@@ -508,7 +508,7 @@ await update(newAdayRef, {
                 const adaylarCount = (window.adaylar || []).length;
                 const bekleyenCount = (window.bekleyenAdaylar || []).length;
                 const estimatedSize = (adaylarCount + bekleyenCount) * 500 * 1024;
-                const limitSize = 1 * 1024 * 1024 * 1024;
+                const limitSize = 10 * 1024 * 1024 * 1024;
 
                 window.dbSizeLimitReached = estimatedSize >= limitSize;
 
