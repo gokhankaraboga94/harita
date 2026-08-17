@@ -1,12 +1,8 @@
 {
   "rewrites": [
-    {
-      "source": "/adminpanel",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/adminpanel", "destination": "/index.html" },
+    { "source": "/reels", "destination": "/index.html" },
+    { "source": "/gizlilik", "destination": "/index.html" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
